@@ -195,9 +195,23 @@ def size_vs_price(municipality: Optional[List[str]] = Query(None),
                   esg:          Optional[List[str]] = Query(None),
                   period:       Optional[List[str]] = Query(None)):
     d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD])
-    d2 = d[["size","price","unit_type","municipality","property_name"]].dropna()
-    if len(d2) > 600: d2 = d2.sample(600, random_state=42)
-    return safe_json(d2.to_dict(orient="records"))
+    cols = ["sub_listing_id","listing_id","size","price","price_per_m2",
+            "unit_type","municipality","city_area","property_name","floor",
+            "bedrooms","unit_url"]
+    d2 = d[[c for c in cols if c in d.columns]].dropna(subset=["size","price"])
+    if len(d2) > 800: d2 = d2.sample(800, random_state=42)
+    rows = []
+    for _, r in d2.iterrows():
+        lat, lng = _get_coords(str(r["municipality"]) if pd.notna(r.get("municipality")) else "")
+        row = {c: r[c] for c in d2.columns}
+        row["lat"] = lat or 39.47
+        row["lng"] = lng or -0.38
+        for k in list(row.keys()):
+            v = row[k]
+            if hasattr(v, 'item'): row[k] = v.item()
+            if isinstance(v, float) and v != v: row[k] = None
+        rows.append(row)
+    return safe_json(rows)
 
 # ══════════════════════════════════════════════════════════════════════════
 #  TEMPORAL  — market-wide month-over-month
@@ -333,6 +347,11 @@ def drilldown_listing(listing_id: int):
     apts = apts.sort_values(["unit_type","price"])
     apt_records = _clean(apts.to_dict(orient="records"))
     apt_records = [{k:(None if str(v)=="<NA>" else v) for k,v in r.items()} for r in apt_records]
+    # attach coords (same for all apts in same listing)
+    lat, lng = _get_coords(str(meta["municipality"]) if pd.notna(meta.get("municipality")) else "")
+    for r in apt_records:
+        r["lat"] = lat or 39.47
+        r["lng"] = lng or -0.38
 
     floor_price = dl.dropna(subset=["floor_num"])[["floor_num","price","unit_type","size","sub_listing_id"]].copy()
     floor_price["floor_num"] = floor_price["floor_num"].astype(int)
@@ -451,3 +470,214 @@ def price_matrix(listing_id: int):
         rows.append(row)
 
     return safe_json({"periods": periods, "rows": rows})
+
+# ══════════════════════════════════════════════════════════════════════════
+#  GEOCOORDINATES  — municipality centroid lookup
+# ══════════════════════════════════════════════════════════════════════════
+MUNI_COORDS = {
+    "Aiora, Valencia":(38.93,-0.97),"Alaquás":(39.46,-0.46),"Albal":(39.38,-0.43),
+    "Albalat Dels Sorells":(39.55,-0.37),"Alberic":(39.12,-0.52),"Alcàsser":(39.40,-0.44),
+    "Aldaia":(39.46,-0.48),"Alfafar":(39.41,-0.39),"Alfara de Baronia":(39.74,-0.28),
+    "Alfara del Patriarca":(39.56,-0.39),"Algar de Palancia":(39.75,-0.34),
+    "Algemesi":(39.18,-0.44),"Almardá, Sagunto/Sagunt":(39.68,-0.25),
+    "Almàssera":(39.53,-0.36),"Antigua Moreria, Sagunto/Sagunt":(39.68,-0.27),
+    "Arrancapins, Valencia":(39.47,-0.39),"Barranquet - El Salvador, Godella":(39.53,-0.42),
+    "Barrio de Favara, Valencia":(39.44,-0.38),"Benaguasil":(39.59,-0.56),
+    "Beneixida":(39.12,-0.58),"Benetusser":(39.42,-0.40),"Beniarjo":(38.93,-0.19),
+    "Benicalap, Valencia":(39.50,-0.40),"Benimàmet":(39.49,-0.43),
+    "Beniopa - San Pere, Gandia":(38.97,-0.18),"Beniparrell":(39.39,-0.42),
+    "Benipeixcar - El Raval, Gandia":(38.98,-0.18),"Benisano":(39.60,-0.59),
+    "Bonrepos i Mirambell":(39.55,-0.38),"Burjassot":(39.51,-0.41),
+    "Catarroja":(39.40,-0.40),"Chiva":(39.47,-0.71),"Cullera":(39.16,-0.25),
+    "Gandia":(38.97,-0.18),"Godella":(39.53,-0.42),"La Eliana":(39.57,-0.53),
+    "L'Eliana":(39.57,-0.53),"Llíria":(39.62,-0.60),"Manises":(39.49,-0.46),
+    "Massamagrell":(39.57,-0.34),"Mislata":(39.48,-0.42),"Moncada":(39.55,-0.40),
+    "Montserrat":(39.35,-0.47),"Museros":(39.58,-0.36),"Náquera":(39.60,-0.41),
+    "Paiporta":(39.42,-0.41),"Paterna":(39.50,-0.44),"Picanya":(39.43,-0.43),
+    "Picassent":(39.36,-0.46),"Puçol":(39.62,-0.32),"Quart de Poblet":(39.47,-0.45),
+    "Riba-roja de Túria":(39.56,-0.61),"Rocafort":(39.54,-0.41),"Sagunto":(39.68,-0.27),
+    "Sedaví":(39.42,-0.39),"Silla":(39.36,-0.41),"Tavernes de la Valldigna":(39.07,-0.27),
+    "Torrent":(39.43,-0.46),"Valencia":(39.47,-0.38),"Vilamarxant":(39.58,-0.65),
+    "Xàtiva":(38.99,-0.52),"Xirivella":(39.46,-0.42),
+    # Extra city-district entries
+    "Campanar, Valencia":(39.49,-0.40),"Camins al Grau, Valencia":(39.47,-0.36),
+    "El Pla del Real, Valencia":(39.48,-0.38),"Extramurs, Valencia":(39.47,-0.39),
+    "La Saïdia, Valencia":(39.49,-0.37),"L'Eixample, Valencia":(39.47,-0.38),
+    "Olivereta, Valencia":(39.46,-0.40),"Poblats Maritims, Valencia":(39.46,-0.33),
+    "Quatre Carreres, Valencia":(39.44,-0.37),"Rascanya, Valencia":(39.50,-0.38),
+    "Sant Marcel·lí, Valencia":(39.44,-0.39),"Tavernes Blanques":(39.53,-0.37),
+    "Torrefiel, Valencia":(39.50,-0.38),"Zona Parc Central - Hort de Trenor, Torrent":(39.43,-0.47),
+    "Natzaret, Valencia":(39.45,-0.34),"El Saler, Valencia":(39.35,-0.32),
+    "Borbotó, Valencia":(39.54,-0.40),"Massarrojos, Valencia":(39.55,-0.39),
+    "Castellar-l'Oliveral, Valencia":(39.41,-0.37),"Pobles del Nord, Valencia":(39.55,-0.38),
+    "Benimaclet, Valencia":(39.49,-0.36),"Nou Moles, Valencia":(39.47,-0.40),
+    "Fonteta de Sant Lluis, Valencia":(39.44,-0.39),"Jesús, Valencia":(39.45,-0.39),
+    "Patraix, Valencia":(39.46,-0.40),"Sant Pau-Bon Pastor, Valencia":(39.48,-0.40),
+    "Tormos, Valencia":(39.50,-0.38),"La Roqueta, Valencia":(39.47,-0.38),
+}
+
+def _get_coords(municipality):
+    if not municipality: return None, None
+    # exact match
+    if municipality in MUNI_COORDS:
+        return MUNI_COORDS[municipality]
+    # try substring
+    for k, v in MUNI_COORDS.items():
+        if municipality.lower() in k.lower() or k.lower() in municipality.lower():
+            return v
+    return None, None
+
+def _parse_address(city_area):
+    """Return {street, municipality, comarca, province} from city_area string."""
+    if pd.isna(city_area): return {}
+    parts = [p.strip() for p in str(city_area).split(",")]
+    if len(parts) < 2: return {"raw": str(city_area)}
+    province = parts[-1]
+    comarca  = parts[-2] if len(parts) >= 3 else None
+    rest     = parts[:-2]
+    import re as _re
+    if rest and _re.match(r'^(Calle|Carrer|Avinguda|Avda|Avenida|Plaza|Plaça|Urb)', rest[0], _re.I):
+        street = _re.sub(r' NN$', '', rest[0])
+        muni   = rest[1] if len(rest) > 1 else None
+    else:
+        street = None
+        muni   = rest[0] if rest else None
+    return {"street": street, "municipality": muni, "comarca": comarca, "province": province}
+
+def _comarca(city_area):
+    d = _parse_address(city_area)
+    return d.get("comarca")
+
+# Add derived columns to df
+for _d in [df]:
+    _d["comarca"]      = _d["city_area"].apply(_comarca)
+    _d["addr_street"]  = _d["city_area"].apply(lambda x: _parse_address(x).get("street"))
+    _d["addr_comarca"] = _d["city_area"].apply(lambda x: _parse_address(x).get("comarca"))
+
+# ══════════════════════════════════════════════════════════════════════════
+#  MAP DATA  — all listings with coords
+# ══════════════════════════════════════════════════════════════════════════
+@app.get("/map/listings")
+def map_listings(municipality: Optional[List[str]] = Query(None)):
+    d = _filter(municipality, period=[LATEST_PERIOD])
+    grp = d.groupby(["listing_id","property_name","municipality","city_area","comarca"], dropna=False).agg(
+        units      = ("sub_listing_id","nunique"),
+        avg_price  = ("price","mean"),
+        min_price  = ("price","min"),
+    ).reset_index()
+    rows = []
+    for _, r in grp.iterrows():
+        lat, lng = _get_coords(str(r["municipality"]) if pd.notna(r["municipality"]) else "")
+        if lat is None:
+            lat, lng = 39.47, -0.38  # fallback Valencia city
+        addr = _parse_address(r["city_area"])
+        rows.append({
+            "listing_id":  int(r["listing_id"]),
+            "property_name": str(r["property_name"]),
+            "municipality": str(r["municipality"]) if pd.notna(r["municipality"]) else "",
+            "comarca":     str(r["comarca"])     if pd.notna(r["comarca"])     else "",
+            "street":      addr.get("street","") or "",
+            "lat": lat, "lng": lng,
+            "units":     int(r["units"]),
+            "avg_price": round(float(r["avg_price"])),
+            "min_price": int(r["min_price"]),
+        })
+    return safe_json(rows)
+
+# ══════════════════════════════════════════════════════════════════════════
+#  NEARBY COMPARISON  — same comarca, different listings
+# ══════════════════════════════════════════════════════════════════════════
+@app.get("/nearby/listings/{listing_id}")
+def nearby_listings(listing_id: int):
+    base = df[df["listing_id"]==listing_id]
+    if base.empty: return safe_json({"comarca":"","listings":[]})
+    comarca = base["comarca"].iloc[0]
+    if pd.isna(comarca): return safe_json({"comarca":"","listings":[]})
+
+    # All listings in same comarca (latest period)
+    d = df[(df["comarca"]==comarca) & (df["period"]==LATEST_PERIOD)]
+    grp = d.groupby(["listing_id","property_name","municipality","city_area","developer","delivery_date","esg_grade"], dropna=False).agg(
+        units        = ("sub_listing_id","nunique"),
+        avg_price    = ("price","mean"),
+        min_price    = ("price","min"),
+        max_price    = ("price","max"),
+        avg_price_m2 = ("price_per_m2","mean"),
+        avg_size     = ("size","mean"),
+        unit_types   = ("unit_type", lambda x: ", ".join(sorted(set(x.dropna())))),
+    ).reset_index()
+    grp["avg_price"]    = grp["avg_price"].round(0)
+    grp["avg_price_m2"] = grp["avg_price_m2"].round(1)
+    grp["avg_size"]     = grp["avg_size"].round(1)
+    grp["esg_grade"]    = grp["esg_grade"].where(pd.notna(grp["esg_grade"]), None)
+
+    # Add coords
+    rows = []
+    for _, r in grp.iterrows():
+        lat, lng = _get_coords(str(r["municipality"]))
+        addr = _parse_address(r["city_area"])
+        rows.append({
+            **{k: (_clean(r[k]) if not isinstance(r[k], (str,bool,type(None))) else r[k]) for k in r.index},
+            "is_current": int(r["listing_id"]) == listing_id,
+            "lat": lat or 39.47, "lng": lng or -0.38,
+            "street": addr.get("street","") or "",
+            "addr_comarca": str(comarca),
+        })
+    return safe_json({"comarca": str(comarca), "listings": rows})
+
+@app.get("/nearby/apartments/{listing_id}")
+def nearby_apartments(listing_id: int, unit_type: Optional[str] = None):
+    """Compare apartments across nearby listings (same comarca)."""
+    base = df[df["listing_id"]==listing_id]
+    if base.empty: return safe_json({"comarca":"","apartments":[]})
+    comarca = base["comarca"].iloc[0]
+    if pd.isna(comarca): return safe_json({"comarca":"","apartments":[]})
+
+    d = df[(df["comarca"]==comarca) & (df["period"]==LATEST_PERIOD)].copy()
+    if unit_type:
+        d = d[d["unit_type"]==unit_type]
+
+    apt_cols = ["sub_listing_id","listing_id","property_name","municipality","unit_type",
+                "price","size","price_per_m2","floor","bedrooms","bathrooms",
+                "has_terrace","has_parking","has_pool","has_lift","has_ac","unit_url","city_area"]
+    apts = d[apt_cols].drop_duplicates("sub_listing_id").copy()
+    for col in ["bedrooms","bathrooms"]:
+        apts[col] = pd.to_numeric(apts[col], errors="coerce").astype("Int64")
+
+    rows = []
+    for _, r in apts.iterrows():
+        lat, lng = _get_coords(str(r["municipality"]))
+        addr = _parse_address(r["city_area"])
+        row = {c: r[c] for c in apt_cols}
+        row["lat"] = lat or 39.47
+        row["lng"] = lng or -0.38
+        row["street"] = addr.get("street","") or ""
+        row["is_current_listing"] = int(r["listing_id"]) == listing_id
+        for k in row:
+            if hasattr(row[k], 'item'):
+                row[k] = row[k].item()
+            if isinstance(row[k], float) and (row[k] != row[k]):
+                row[k] = None
+        rows.append(row)
+
+    rows.sort(key=lambda r: r.get("price") or 999999)
+    return safe_json({"comarca": str(comarca), "apartments": rows})
+
+# ══════════════════════════════════════════════════════════════════════════
+#  LISTING DETAIL — enhanced with address + coords
+# ══════════════════════════════════════════════════════════════════════════
+@app.get("/listing/meta/{listing_id}")
+def listing_meta(listing_id: int):
+    d = df[df["listing_id"]==listing_id]
+    if d.empty: return safe_json({})
+    r = d.iloc[0]
+    lat, lng = _get_coords(str(r["municipality"]))
+    addr = _parse_address(r["city_area"])
+    return safe_json({
+        "listing_id":   int(listing_id),
+        "property_name":str(r["property_name"]),
+        "municipality": str(r["municipality"]) if pd.notna(r["municipality"]) else "",
+        "city_area":    str(r["city_area"])    if pd.notna(r["city_area"])    else "",
+        "comarca":      str(r["comarca"])      if pd.notna(r["comarca"])      else "",
+        "street":       addr.get("street","") or "",
+        "lat": lat or 39.47, "lng": lng or -0.38,
+    })
