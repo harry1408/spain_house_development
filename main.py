@@ -202,7 +202,7 @@ def size_vs_price(municipality: Optional[List[str]] = Query(None),
     if len(d2) > 800: d2 = d2.sample(800, random_state=42)
     rows = []
     for _, r in d2.iterrows():
-        lat, lng = _get_coords(str(r["municipality"]) if pd.notna(r.get("municipality")) else "")
+        lat, lng = _listing_coords(r["listing_id"], str(r["municipality"]) if pd.notna(r.get("municipality")) else "")
         row = {c: r[c] for c in d2.columns}
         row["lat"] = lat or 39.47
         row["lng"] = lng or -0.38
@@ -304,6 +304,23 @@ def drilldown_municipality(municipality: str):
     mix["_s"] = mix["unit_type"].apply(lambda x: order.index(x) if x in order else 99)
     mix = mix.sort_values("_s").drop("_s",axis=1)
 
+    # Full per-type stats for summary table
+    ut_stats = dl.groupby("unit_type").agg(
+        count     =("sub_listing_id","nunique"),
+        min_price =("price","min"),
+        avg_price =("price","mean"),
+        max_price =("price","max"),
+        avg_size  =("size","mean"),
+        avg_pm2   =("price_per_m2","mean"),
+    ).reset_index()
+    ut_stats["min_price"] = ut_stats["min_price"].round(0)
+    ut_stats["avg_price"] = ut_stats["avg_price"].round(0)
+    ut_stats["max_price"] = ut_stats["max_price"].round(0)
+    ut_stats["avg_size"]  = ut_stats["avg_size"].round(1)
+    ut_stats["avg_pm2"]   = ut_stats["avg_pm2"].round(0)
+    ut_stats["_s"] = ut_stats["unit_type"].apply(lambda x: order.index(x) if x in order else 99)
+    ut_stats = ut_stats.sort_values("_s").drop("_s",axis=1)
+
     bins   = [0,150000,200000,250000,300000,400000,500000,700000,10000000]
     labels = ["<150k","150-200k","200-250k","250-300k","300-400k","400-500k","500-700k",">700k"]
     d2 = dl.copy(); d2["bin"] = pd.cut(d2["price"], bins=bins, labels=labels)
@@ -321,6 +338,7 @@ def drilldown_municipality(municipality: str):
     return safe_json({"listings": listings_grp.to_dict(orient="records"),
                       "stats": stats,
                       "unit_type_mix": mix.to_dict(orient="records"),
+                      "unit_type_stats": ut_stats.to_dict(orient="records"),
                       "price_dist": price_dist.to_dict(orient="records"),
                       "trend": trend.drop("period_ord",axis=1).to_dict(orient="records")})
 
@@ -348,7 +366,7 @@ def drilldown_listing(listing_id: int):
     apt_records = _clean(apts.to_dict(orient="records"))
     apt_records = [{k:(None if str(v)=="<NA>" else v) for k,v in r.items()} for r in apt_records]
     # attach coords (same for all apts in same listing)
-    lat, lng = _get_coords(str(meta["municipality"]) if pd.notna(meta.get("municipality")) else "")
+    lat, lng = _listing_coords(listing_id, str(meta["municipality"]) if pd.notna(meta.get("municipality")) else "")
     for r in apt_records:
         r["lat"] = lat or 39.47
         r["lng"] = lng or -0.38
@@ -527,6 +545,23 @@ def _get_coords(municipality):
             return v
     return None, None
 
+# Per-listing precise coordinates (pre-geocoded from city_area)
+import os as _os
+_LISTING_COORDS_PATH = _os.path.join(_os.path.dirname(__file__), "listing_coords.json")
+try:
+    with open(_LISTING_COORDS_PATH) as _f:
+        LISTING_COORDS = {int(k): v for k, v in json.load(_f).items()}
+except Exception:
+    LISTING_COORDS = {}
+
+def _listing_coords(listing_id, municipality=""):
+    """Return (lat, lng) — per-listing precise coords first, then municipality fallback."""
+    c = LISTING_COORDS.get(int(listing_id) if listing_id else -1)
+    if c:
+        return c["lat"], c["lng"]
+    lat, lng = _get_coords(str(municipality))
+    return (lat or 39.47), (lng or -0.38)
+
 def _parse_address(city_area):
     """Return {street, municipality, comarca, province} from city_area string."""
     if pd.isna(city_area): return {}
@@ -567,9 +602,7 @@ def map_listings(municipality: Optional[List[str]] = Query(None)):
     ).reset_index()
     rows = []
     for _, r in grp.iterrows():
-        lat, lng = _get_coords(str(r["municipality"]) if pd.notna(r["municipality"]) else "")
-        if lat is None:
-            lat, lng = 39.47, -0.38  # fallback Valencia city
+        lat, lng = _listing_coords(r["listing_id"], str(r["municipality"]) if pd.notna(r["municipality"]) else "")
         addr = _parse_address(r["city_area"])
         rows.append({
             "listing_id":  int(r["listing_id"]),
@@ -613,7 +646,7 @@ def nearby_listings(listing_id: int):
     # Add coords
     rows = []
     for _, r in grp.iterrows():
-        lat, lng = _get_coords(str(r["municipality"]))
+        lat, lng = _listing_coords(r["listing_id"], str(r["municipality"]))
         addr = _parse_address(r["city_area"])
         rows.append({
             **{k: (_clean(r[k]) if not isinstance(r[k], (str,bool,type(None))) else r[k]) for k in r.index},
@@ -645,7 +678,7 @@ def nearby_apartments(listing_id: int, unit_type: Optional[str] = None):
 
     rows = []
     for _, r in apts.iterrows():
-        lat, lng = _get_coords(str(r["municipality"]))
+        lat, lng = _listing_coords(r["listing_id"], str(r["municipality"]))
         addr = _parse_address(r["city_area"])
         row = {c: r[c] for c in apt_cols}
         row["lat"] = lat or 39.47
@@ -670,7 +703,7 @@ def listing_meta(listing_id: int):
     d = df[df["listing_id"]==listing_id]
     if d.empty: return safe_json({})
     r = d.iloc[0]
-    lat, lng = _get_coords(str(r["municipality"]))
+    lat, lng = _listing_coords(listing_id, str(r["municipality"]))
     addr = _parse_address(r["city_area"])
     return safe_json({
         "listing_id":   int(listing_id),
