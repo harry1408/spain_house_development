@@ -85,8 +85,9 @@ for _d in [df, _full]:
     for col in _am.columns:
         _d[col] = _am[col]
 
-def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None, df_src=None):
+def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None, province=None, df_src=None):
     d = (df_src if df_src is not None else df).copy()
+    if province:     d = d[d["province"].isin(province)]
     if municipality: d = d[d["municipality"].isin(municipality)]
     if unit_type:    d = d[d["unit_type"].isin(unit_type)]
     if year:         d = d[d["delivery_year"].isin([int(y) for y in year])]
@@ -99,7 +100,21 @@ def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None,
 # ══════════════════════════════════════════════════════════════════════════
 @app.get("/filters")
 def get_filters():
+    # Build province -> municipalities mapping
+    province_munis = {}
+    for _, row in df[["province","municipality"]].drop_duplicates().iterrows():
+        p = str(row["province"]) if pd.notna(row["province"]) else "Other"
+        m = str(row["municipality"]) if pd.notna(row["municipality"]) else None
+        if m:
+            province_munis.setdefault(p, [])
+            if m not in province_munis[p]:
+                province_munis[p].append(m)
+    for p in province_munis:
+        province_munis[p] = sorted(province_munis[p])
+
     return {"municipalities": sorted(df["municipality"].dropna().unique().tolist()),
+            "provinces":      sorted(df["province"].dropna().unique().tolist()),
+            "province_munis": province_munis,
             "unit_types":     sorted(df["unit_type"].dropna().unique().tolist()),
             "delivery_years": sorted([int(y) for y in df["delivery_year"].dropna().unique()]),
             "esg_grades":     sorted(df["esg_grade"].dropna().unique().tolist()),
@@ -112,12 +127,13 @@ def get_filters():
 # ══════════════════════════════════════════════════════════════════════════
 @app.get("/stats")
 def get_stats(municipality: Optional[List[str]] = Query(None),
+              province:     Optional[List[str]] = Query(None),
               unit_type:    Optional[List[str]] = Query(None),
               year:         Optional[List[str]] = Query(None),
               esg:          Optional[List[str]] = Query(None),
               period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD])
-    p = _filter(municipality, unit_type, year, esg, [PREV_PERIOD]) if PREV_PERIOD else None
+    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
+    p = _filter(municipality, unit_type, year, esg, [PREV_PERIOD], province) if PREV_PERIOD else None
     def _s(d): return {"total_units": len(d),
                        "avg_price":    round(float(d["price"].mean()))   if len(d) else 0,
                        "avg_price_m2": round(float(d["price_per_m2"].mean()),1) if len(d) else 0,
@@ -129,11 +145,12 @@ def get_stats(municipality: Optional[List[str]] = Query(None),
 
 @app.get("/charts/price-by-unit-type")
 def price_by_unit_type(municipality: Optional[List[str]] = Query(None),
+                       province:     Optional[List[str]] = Query(None),
                        unit_type:    Optional[List[str]] = Query(None),
                        year:         Optional[List[str]] = Query(None),
                        esg:          Optional[List[str]] = Query(None),
                        period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD])
+    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
     r = d.groupby("unit_type").agg(avg_price=("price","mean"), count=("price","count"), avg_size=("size","mean")).reset_index()
     r["avg_price"] = r["avg_price"].round(0); r["avg_size"] = r["avg_size"].round(1)
     order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
@@ -142,22 +159,24 @@ def price_by_unit_type(municipality: Optional[List[str]] = Query(None),
 
 @app.get("/charts/delivery-timeline")
 def delivery_timeline(municipality: Optional[List[str]] = Query(None),
+                      province:     Optional[List[str]] = Query(None),
                       unit_type:    Optional[List[str]] = Query(None),
                       year:         Optional[List[str]] = Query(None),
                       esg:          Optional[List[str]] = Query(None),
                       period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD]).dropna(subset=["delivery_quarter"])
+    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province).dropna(subset=["delivery_quarter"])
     r = d.groupby("delivery_quarter").agg(count=("price","count"), avg_price=("price","mean")).reset_index()
     r["avg_price"] = r["avg_price"].round(0)
     return safe_json(r.sort_values("delivery_quarter").to_dict(orient="records"))
 
 @app.get("/charts/price-distribution")
 def price_distribution(municipality: Optional[List[str]] = Query(None),
+                       province:     Optional[List[str]] = Query(None),
                        unit_type:    Optional[List[str]] = Query(None),
                        year:         Optional[List[str]] = Query(None),
                        esg:          Optional[List[str]] = Query(None),
                        period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD])
+    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
     bins   = [0,150000,200000,250000,300000,400000,500000,700000,10000000]
     labels = ["<150k","150-200k","200-250k","250-300k","300-400k","400-500k","500-700k",">700k"]
     d2 = d.copy(); d2["bin"] = pd.cut(d2["price"], bins=bins, labels=labels)
@@ -165,11 +184,12 @@ def price_distribution(municipality: Optional[List[str]] = Query(None),
 
 @app.get("/charts/municipality-overview")
 def municipality_overview(municipality: Optional[List[str]] = Query(None),
+                          province:     Optional[List[str]] = Query(None),
                           unit_type:    Optional[List[str]] = Query(None),
                           year:         Optional[List[str]] = Query(None),
                           esg:          Optional[List[str]] = Query(None),
                           period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD])
+    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
     r = d.groupby("municipality").agg(units=("price","count"), listings=("listing_id","nunique"),
                                       avg_price=("price","mean"), avg_price_m2=("price_per_m2","mean")).reset_index()
     r["avg_price"]    = r["avg_price"].round(0)
@@ -178,11 +198,12 @@ def municipality_overview(municipality: Optional[List[str]] = Query(None),
 
 @app.get("/charts/esg-breakdown")
 def esg_breakdown(municipality: Optional[List[str]] = Query(None),
+                  province:     Optional[List[str]] = Query(None),
                   unit_type:    Optional[List[str]] = Query(None),
                   year:         Optional[List[str]] = Query(None),
                   esg:          Optional[List[str]] = Query(None),
                   period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD])
+    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
     r = d.groupby("esg_grade", dropna=False).agg(count=("price","count"), avg_price=("price","mean")).reset_index()
     r["esg_grade"] = r["esg_grade"].fillna("Unknown")
     r["avg_price"] = r["avg_price"].round(0)
@@ -190,11 +211,12 @@ def esg_breakdown(municipality: Optional[List[str]] = Query(None),
 
 @app.get("/charts/size-vs-price")
 def size_vs_price(municipality: Optional[List[str]] = Query(None),
+                  province:     Optional[List[str]] = Query(None),
                   unit_type:    Optional[List[str]] = Query(None),
                   year:         Optional[List[str]] = Query(None),
                   esg:          Optional[List[str]] = Query(None),
                   period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD])
+    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
     cols = ["sub_listing_id","listing_id","size","price","price_per_m2",
             "unit_type","municipality","city_area","property_name","floor",
             "bedrooms","unit_url"]
@@ -218,8 +240,9 @@ def size_vs_price(municipality: Optional[List[str]] = Query(None),
 # ══════════════════════════════════════════════════════════════════════════
 @app.get("/temporal/market-trend")
 def market_trend(municipality: Optional[List[str]] = Query(None),
+                 province:     Optional[List[str]] = Query(None),
                  unit_type:    Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type)
+    d = _filter(municipality, unit_type, province=province)
     r = d.groupby(["period","period_ord"]).agg(
         avg_price    =("price","mean"),
         avg_price_m2 =("price_per_m2","mean"),
@@ -232,8 +255,9 @@ def market_trend(municipality: Optional[List[str]] = Query(None),
     return safe_json(r.drop("period_ord",axis=1).to_dict(orient="records"))
 
 @app.get("/temporal/unit-type-trend")
-def unit_type_trend(municipality: Optional[List[str]] = Query(None)):
-    d = _filter(municipality)
+def unit_type_trend(municipality: Optional[List[str]] = Query(None),
+                    province:     Optional[List[str]] = Query(None)):
+    d = _filter(municipality, province=province)
     r = d.groupby(["period","period_ord","unit_type"]).agg(
         avg_price=("price","mean"), count=("sub_listing_id","nunique")
     ).reset_index().sort_values(["unit_type","period_ord"])
@@ -241,8 +265,9 @@ def unit_type_trend(municipality: Optional[List[str]] = Query(None)):
     return safe_json(r.drop("period_ord",axis=1).to_dict(orient="records"))
 
 @app.get("/temporal/municipality-trend")
-def municipality_trend(municipality: Optional[List[str]] = Query(None)):
-    d = _filter(municipality) if municipality else df
+def municipality_trend(municipality: Optional[List[str]] = Query(None),
+                       province:     Optional[List[str]] = Query(None)):
+    d = _filter(municipality, province=province) if municipality else df
     r = d.groupby(["municipality","period","period_ord"]).agg(
         avg_price    =("price","mean"),
         avg_price_m2 =("price_per_m2","mean"),
@@ -254,9 +279,10 @@ def municipality_trend(municipality: Optional[List[str]] = Query(None)):
 
 @app.get("/temporal/inventory-trend")
 def inventory_trend(municipality: Optional[List[str]] = Query(None),
+                    province:     Optional[List[str]] = Query(None),
                     unit_type:    Optional[List[str]] = Query(None)):
     """Units available per period, plus new/removed vs prior period."""
-    d = _filter(municipality, unit_type)
+    d = _filter(municipality, unit_type, province=province)
     result = []
     prev_ids = None
     for period in PERIODS_SORTED:
