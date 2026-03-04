@@ -151,8 +151,8 @@ def price_by_unit_type(municipality: Optional[List[str]] = Query(None),
                        esg:          Optional[List[str]] = Query(None),
                        period:       Optional[List[str]] = Query(None)):
     d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
-    r = d.groupby("unit_type").agg(avg_price=("price","mean"), count=("price","count"), avg_size=("size","mean")).reset_index()
-    r["avg_price"] = r["avg_price"].round(0); r["avg_size"] = r["avg_size"].round(1)
+    r = d.groupby("unit_type").agg(avg_price=("price","mean"), count=("price","count"), avg_size=("size","mean"), avg_price_m2=("price_per_m2","mean")).reset_index()
+    r["avg_price"] = r["avg_price"].round(0); r["avg_size"] = r["avg_size"].round(1); r["avg_price_m2"] = r["avg_price_m2"].round(0)
     order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
     r["_s"] = r["unit_type"].apply(lambda x: order.index(x) if x in order else 99)
     return safe_json(r.sort_values("_s").drop("_s",axis=1).to_dict(orient="records"))
@@ -180,7 +180,9 @@ def price_distribution(municipality: Optional[List[str]] = Query(None),
     bins   = [0,150000,200000,250000,300000,400000,500000,700000,10000000]
     labels = ["<150k","150-200k","200-250k","250-300k","300-400k","400-500k","500-700k",">700k"]
     d2 = d.copy(); d2["bin"] = pd.cut(d2["price"], bins=bins, labels=labels)
-    return safe_json(d2.groupby("bin", observed=True).size().reset_index(name="count").to_dict(orient="records"))
+    result = d2.groupby("bin", observed=True).agg(count=("price","size"), avg_price_m2=("price_per_m2","mean")).reset_index()
+    result["avg_price_m2"] = result["avg_price_m2"].round(0)
+    return safe_json(result.to_dict(orient="records"))
 
 @app.get("/charts/municipality-overview")
 def municipality_overview(municipality: Optional[List[str]] = Query(None),
@@ -350,7 +352,9 @@ def drilldown_municipality(municipality: str):
     bins   = [0,150000,200000,250000,300000,400000,500000,700000,10000000]
     labels = ["<150k","150-200k","200-250k","250-300k","300-400k","400-500k","500-700k",">700k"]
     d2 = dl.copy(); d2["bin"] = pd.cut(d2["price"], bins=bins, labels=labels)
-    price_dist = d2.groupby("bin", observed=True).size().reset_index(name="count")
+    price_dist_grp = d2.groupby("bin", observed=True).agg(count=("price","size"), avg_price_m2=("price_per_m2","mean")).reset_index()
+    price_dist_grp["avg_price_m2"] = price_dist_grp["avg_price_m2"].round(0)
+    price_dist = price_dist_grp
 
     # month-over-month trend for this municipality
     trend = d.groupby(["period","period_ord"]).agg(
