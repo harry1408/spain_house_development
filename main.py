@@ -452,6 +452,7 @@ def drilldown_listing(listing_id: int):
         "municipality":  str(meta["municipality"]),
         "delivery_date": str(meta["delivery_date"]),
         "esg_grade":     str(meta["esg_grade"]) if pd.notna(meta["esg_grade"]) else None,
+        "description":   str(meta["description"]) if pd.notna(meta.get("description")) else None,
         "total_units":   int(len(dl)),
         "periods":       PERIODS_SORTED,
         "apartments":    apt_records,
