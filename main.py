@@ -566,6 +566,7 @@ def price_matrix(listing_id: int):
             "has_ac":     bool(meta.get("has_ac",     False)),
             "has_storage":bool(meta.get("has_storage",False)),
             "unit_url":   str(meta["unit_url"])     if pd.notna(meta.get("unit_url")) else None,
+            "last_updated": str(meta["last_updated"]) if pd.notna(meta.get("last_updated")) else None,
         }
 
         price_vals = []
