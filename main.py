@@ -55,6 +55,17 @@ print(f"[data] Rows: {len(_raw):,}  |  provinces: {sorted(_raw['province'].dropn
 _raw["period"] = _raw["Month"].astype(str) + " " + _raw["Year"].astype(str)
 _raw["period_ord"] = _raw["Month"].map(MONTH_ORDER) + (_raw["Year"].astype(int)-2000)*100
 
+# Normalise municipality: take last segment after comma  e.g. "La Conarda, Betera" -> "Betera"
+def _clean_municipality(s):
+    if pd.isna(s): return s
+    s = str(s).strip()
+    return s.split(",")[-1].strip() if "," in s else s
+
+_raw["municipality"] = _raw["municipality"].apply(_clean_municipality)
+
+# Normalise province to Title Case  e.g. "alicante" -> "Alicante", "Valencia" stays "Valencia"
+_raw["province"] = _raw["province"].apply(lambda s: str(s).strip().title() if pd.notna(s) else s)
+
 # Full df (with duplicates) used only for snapshot-aware queries; deduplicated per sub+period for unit data
 _full = _raw.copy()
 df = _raw.drop_duplicates(subset=["sub_listing_id","period"]).copy()
@@ -62,6 +73,24 @@ df = _raw.drop_duplicates(subset=["sub_listing_id","period"]).copy()
 PERIODS_SORTED = sorted(df["period"].unique(), key=lambda p: df[df["period"]==p]["period_ord"].iloc[0])
 LATEST_PERIOD  = PERIODS_SORTED[-1]
 PREV_PERIOD    = PERIODS_SORTED[-2] if len(PERIODS_SORTED) > 1 else None
+
+# Per-province latest period (provinces may have different update cadences)
+_prov_latest = (
+    df.groupby("province")["period_ord"]
+    .max()
+    .reset_index()
+    .rename(columns={"period_ord": "max_ord"})
+)
+_prov_latest = dict(zip(_prov_latest["province"], _prov_latest["max_ord"]))
+
+# Mark each row: is it the latest snapshot for its province?
+df["_is_latest"] = df.apply(lambda r: r["period_ord"] == _prov_latest.get(r["province"], -1), axis=1)
+_full["_is_latest"] = _full.apply(lambda r: r["period_ord"] == _prov_latest.get(r["province"], -1), axis=1)
+
+def _latest_df(df_src=None):
+    """Return rows that represent the latest period for each province."""
+    d = df_src if df_src is not None else df
+    return d[d["_is_latest"]]
 
 def _year(s):
     if pd.isna(s): return None
@@ -115,13 +144,17 @@ for _d in [df, _full]:
         _d[col] = _am[col]
 
 def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None, province=None, df_src=None):
-    d = (df_src if df_src is not None else df).copy()
+    base = df_src if df_src is not None else df
+    # When no period specified, use per-province latest (so all provinces show even if not in sync)
+    if period:
+        d = base[base["period"].isin(period)].copy()
+    else:
+        d = _latest_df(base).copy()
     if province:     d = d[d["province"].isin(province)]
     if municipality: d = d[d["municipality"].isin(municipality)]
     if unit_type:    d = d[d["unit_type"].isin(unit_type)]
     if year:         d = d[d["delivery_year"].isin([int(y) for y in year])]
     if esg:          d = d[d["esg_grade"].isin(esg)]
-    if period:       d = d[d["period"].isin(period)]
     return d
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -174,7 +207,7 @@ def get_stats(municipality: Optional[List[str]] = Query(None),
               year:         Optional[List[str]] = Query(None),
               esg:          Optional[List[str]] = Query(None),
               period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
+    d = _filter(municipality, unit_type, year, esg, period, province)
     p = _filter(municipality, unit_type, year, esg, [PREV_PERIOD], province) if PREV_PERIOD else None
     def _s(d): return {"total_units": len(d),
                        "avg_price":    round(float(d["price"].mean()))   if len(d) else 0,
@@ -192,7 +225,7 @@ def price_by_unit_type(municipality: Optional[List[str]] = Query(None),
                        year:         Optional[List[str]] = Query(None),
                        esg:          Optional[List[str]] = Query(None),
                        period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
+    d = _filter(municipality, unit_type, year, esg, period, province)
     r = d.groupby("unit_type").agg(avg_price=("price","mean"), count=("price","count"), avg_size=("size","mean"), avg_price_m2=("price_per_m2","mean")).reset_index()
     r["avg_price"] = r["avg_price"].round(0); r["avg_size"] = r["avg_size"].round(1); r["avg_price_m2"] = r["avg_price_m2"].round(0)
     order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
@@ -206,7 +239,7 @@ def delivery_timeline(municipality: Optional[List[str]] = Query(None),
                       year:         Optional[List[str]] = Query(None),
                       esg:          Optional[List[str]] = Query(None),
                       period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province).dropna(subset=["delivery_quarter"])
+    d = _filter(municipality, unit_type, year, esg, period, province).dropna(subset=["delivery_quarter"])
     r = d.groupby("delivery_quarter").agg(count=("price","count"), avg_price=("price","mean")).reset_index()
     r["avg_price"] = r["avg_price"].round(0)
     return safe_json(r.sort_values("delivery_quarter").to_dict(orient="records"))
@@ -218,7 +251,7 @@ def price_distribution(municipality: Optional[List[str]] = Query(None),
                        year:         Optional[List[str]] = Query(None),
                        esg:          Optional[List[str]] = Query(None),
                        period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
+    d = _filter(municipality, unit_type, year, esg, period, province)
     bins   = [0,150000,200000,250000,300000,400000,500000,700000,10000000]
     labels = ["<150k","150-200k","200-250k","250-300k","300-400k","400-500k","500-700k",">700k"]
     d2 = d.copy(); d2["bin"] = pd.cut(d2["price"], bins=bins, labels=labels)
@@ -233,7 +266,7 @@ def municipality_overview(municipality: Optional[List[str]] = Query(None),
                           year:         Optional[List[str]] = Query(None),
                           esg:          Optional[List[str]] = Query(None),
                           period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
+    d = _filter(municipality, unit_type, year, esg, period, province)
     r = d.groupby("municipality").agg(units=("price","count"), listings=("listing_id","nunique"),
                                       avg_price=("price","mean"), avg_price_m2=("price_per_m2","mean")).reset_index()
     r["avg_price"]    = r["avg_price"].round(0)
@@ -247,7 +280,7 @@ def esg_breakdown(municipality: Optional[List[str]] = Query(None),
                   year:         Optional[List[str]] = Query(None),
                   esg:          Optional[List[str]] = Query(None),
                   period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
+    d = _filter(municipality, unit_type, year, esg, period, province)
     r = d.groupby("esg_grade", dropna=False).agg(count=("price","count"), avg_price=("price","mean")).reset_index()
     r["esg_grade"] = r["esg_grade"].fillna("Unknown")
     r["avg_price"] = r["avg_price"].round(0)
@@ -260,7 +293,7 @@ def size_vs_price(municipality: Optional[List[str]] = Query(None),
                   year:         Optional[List[str]] = Query(None),
                   esg:          Optional[List[str]] = Query(None),
                   period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period or [LATEST_PERIOD], province)
+    d = _filter(municipality, unit_type, year, esg, period, province)
     cols = ["sub_listing_id","listing_id","size","price","price_per_m2",
             "unit_type","municipality","city_area","property_name","floor",
             "bedrooms","unit_url"]
@@ -346,8 +379,8 @@ def drilldown_municipality(municipality: str):
     if d.empty:
         return safe_json({"listings":[],"stats":{},"unit_type_mix":[],"price_dist":[],"trend":[]})
 
-    # latest period snapshot for listings
-    dl = d[d["period"]==LATEST_PERIOD]
+    # latest period snapshot for listings (use per-province latest)
+    dl = d[d["_is_latest"]]
     listings_grp = dl.groupby(["listing_id","property_name","developer","delivery_date","esg_grade"], dropna=False).agg(
         units        =("sub_listing_id","nunique"),
         min_price    =("price","min"), max_price=("price","max"),
@@ -422,13 +455,14 @@ def drilldown_listing(listing_id: int):
     d = df[df["listing_id"] == listing_id]
     if d.empty: return safe_json({})
 
-    meta = d[d["period"]==LATEST_PERIOD].iloc[0] if not d[d["period"]==LATEST_PERIOD].empty else d.iloc[0]
-    dl   = d[d["period"]==LATEST_PERIOD]
+    meta = d[d["_is_latest"]].iloc[0] if not d[d["_is_latest"]].empty else d.iloc[0]
+    dl   = d[d["_is_latest"]]
 
     apt_cols = ["sub_listing_id","unit_type","price","size","price_per_m2",
                 "floor","floor_num","bedrooms","bathrooms","floor_area_m2",
                 "has_terrace","has_parking","has_pool","has_garden",
                 "has_lift","has_ac","has_storage","has_wardrobes","unit_url"]
+    if "last_updated" in dl.columns: apt_cols = apt_cols + ["last_updated"]
     apts = dl[apt_cols].copy()
     for col in ["floor_num","bedrooms","bathrooms","floor_area_m2"]:
         apts[col] = pd.to_numeric(apts[col], errors="coerce").astype("Int64")
@@ -667,7 +701,7 @@ for _d in [df]:
 # ══════════════════════════════════════════════════════════════════════════
 @app.get("/map/listings")
 def map_listings(municipality: Optional[List[str]] = Query(None)):
-    d = _filter(municipality, period=[LATEST_PERIOD])
+    d = _latest_df()
     grp = d.groupby(["listing_id","property_name","municipality","city_area","comarca"], dropna=False).agg(
         units      = ("sub_listing_id","nunique"),
         avg_price  = ("price","mean"),
@@ -701,7 +735,7 @@ def nearby_listings(listing_id: int):
     if pd.isna(comarca): return safe_json({"comarca":"","listings":[]})
 
     # All listings in same comarca (latest period)
-    d = df[(df["comarca"]==comarca) & (df["period"]==LATEST_PERIOD)]
+    d = df[(df["comarca"]==comarca) & df["_is_latest"]]
     grp = d.groupby(["listing_id","property_name","municipality","city_area","developer","delivery_date","esg_grade"], dropna=False).agg(
         units        = ("sub_listing_id","nunique"),
         avg_price    = ("price","mean"),
@@ -738,13 +772,14 @@ def nearby_apartments(listing_id: int, unit_type: Optional[str] = None):
     comarca = base["comarca"].iloc[0]
     if pd.isna(comarca): return safe_json({"comarca":"","apartments":[]})
 
-    d = df[(df["comarca"]==comarca) & (df["period"]==LATEST_PERIOD)].copy()
+    d = df[(df["comarca"]==comarca) & df["_is_latest"]].copy()
     if unit_type:
         d = d[d["unit_type"]==unit_type]
 
     apt_cols = ["sub_listing_id","listing_id","property_name","municipality","unit_type",
                 "price","size","price_per_m2","floor","bedrooms","bathrooms",
                 "has_terrace","has_parking","has_pool","has_lift","has_ac","unit_url","city_area"]
+    if "last_updated" in d.columns: apt_cols = apt_cols + ["last_updated"]
     apts = d[apt_cols].drop_duplicates("sub_listing_id").copy()
     for col in ["bedrooms","bathrooms"]:
         apts[col] = pd.to_numeric(apts[col], errors="coerce").astype("Int64")
@@ -857,7 +892,7 @@ def delisted_apartments(listing_id: int):
 
     apt_cols = ["sub_listing_id","unit_type","price","size","price_per_m2",
                 "floor","floor_num","bedrooms","bathrooms",
-                "has_terrace","has_parking","has_pool","has_lift","has_ac","unit_url"]
+                "has_terrace","has_parking","has_pool","has_lift","has_ac","unit_url","last_updated"]
     apts = dp[[c for c in apt_cols if c in dp.columns]].copy()
     for col in ["floor_num","bedrooms","bathrooms"]:
         if col in apts.columns:
