@@ -2,10 +2,10 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import pandas as pd
-import re, math, json
+import re, math, json, glob, os
 from typing import Optional, List
 
-app = FastAPI(title="Valencia Housing Dashboard API")
+app = FastAPI(title="Housing Dashboard API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 MONTH_ORDER = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,
@@ -21,7 +21,36 @@ def safe_json(data):
     return JSONResponse(content=_clean(data))
 
 # ── load & enrich ──────────────────────────────────────────────────────────
-_raw = pd.read_excel("valencia_all_units.xlsx")
+# Auto-discover all .xlsx files in the data/ folder (drop any into data/ to add)
+# Tries multiple base directories so it works regardless of where uvicorn is launched from
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_CWD        = os.getcwd()
+_CANDIDATES = [
+    os.path.join(_SCRIPT_DIR, "data"),   # relative to main.py (most reliable)
+    os.path.join(_CWD,        "data"),   # relative to working dir
+    _SCRIPT_DIR,                          # legacy: xlsx files next to main.py
+    _CWD,                                 # legacy: xlsx files in working dir
+]
+_xlsx_files = []
+_DATA_DIR   = None
+for _candidate in _CANDIDATES:
+    _found = sorted(glob.glob(os.path.join(_candidate, "*.xlsx")))
+    if _found:
+        _xlsx_files = _found
+        _DATA_DIR   = _candidate
+        break
+
+if not _xlsx_files:
+    raise RuntimeError(
+        f"No .xlsx files found. Tried: {_CANDIDATES}\n"
+        f"Create a 'data/' folder next to main.py and drop your .xlsx files there."
+    )
+
+print(f"[data] Data dir : {_DATA_DIR}")
+print(f"[data] Loading  : {[os.path.basename(f) for f in _xlsx_files]}")
+_raw = pd.concat([pd.read_excel(f) for f in _xlsx_files], ignore_index=True)
+print(f"[data] Rows: {len(_raw):,}  |  provinces: {sorted(_raw['province'].dropna().unique().tolist())}")
+
 # Canonical snapshot label: "Feb 2026"
 _raw["period"] = _raw["Month"].astype(str) + " " + _raw["Year"].astype(str)
 _raw["period_ord"] = _raw["Month"].map(MONTH_ORDER) + (_raw["Year"].astype(int)-2000)*100
@@ -98,6 +127,19 @@ def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None,
 # ══════════════════════════════════════════════════════════════════════════
 #  META
 # ══════════════════════════════════════════════════════════════════════════
+@app.get("/data-sources")
+def get_data_sources():
+    """Returns list of loaded data files and row counts per province."""
+    sources = []
+    for f in _xlsx_files:
+        name = os.path.basename(f)
+        province_name = name.replace("_all_units.xlsx","").replace("_"," ").title()
+        count = int(df[df["province"] == province_name.lower()]["sub_listing_id"].nunique()) \
+                if province_name.lower() in df["province"].str.lower().values else None
+        sources.append({"file": name, "province": province_name})
+    return safe_json({"sources": sources, "total_rows": len(df), "provinces": sorted(df["province"].dropna().unique().tolist())})
+
+
 @app.get("/filters")
 def get_filters():
     # Build province -> municipalities mapping
@@ -744,4 +786,94 @@ def listing_meta(listing_id: int):
         "comarca":      str(r["comarca"])      if pd.notna(r["comarca"])      else "",
         "street":       addr.get("street","") or "",
         "lat": lat or 39.47, "lng": lng or -0.38,
+    })
+
+# ══════════════════════════════════════════════════════════════════════════
+#  DELISTED — developments + apartments present in prev period but not latest
+# ══════════════════════════════════════════════════════════════════════════
+@app.get("/delisted/listings")
+def delisted_listings(province: Optional[List[str]] = Query(None),
+                      municipality: Optional[List[str]] = Query(None)):
+    if not PREV_PERIOD:
+        return safe_json({"listings": [], "summary": {}, "periods": {"prev": None, "latest": None}})
+
+    d = df.copy()
+    if province:     d = d[d["province"].isin(province)]
+    if municipality: d = d[d["municipality"].isin(municipality)]
+
+    prev_ids   = set(d[d["period"]==PREV_PERIOD]["listing_id"].unique())
+    latest_ids = set(d[d["period"]==LATEST_PERIOD]["listing_id"].unique())
+    delisted   = prev_ids - latest_ids
+
+    if not delisted:
+        return safe_json({"listings": [], "summary": {"count":0,"units":0}, "periods": {"prev":PREV_PERIOD,"latest":LATEST_PERIOD}})
+
+    # Get data from the prev period for these listings
+    dp = d[(d["listing_id"].isin(delisted)) & (d["period"]==PREV_PERIOD)]
+    grp = dp.groupby(["listing_id","property_name","developer","municipality","city_area","esg_grade","delivery_date"], dropna=False).agg(
+        units        =("sub_listing_id","nunique"),
+        avg_price    =("price","mean"),
+        min_price    =("price","min"),
+        max_price    =("price","max"),
+        avg_price_m2 =("price_per_m2","mean"),
+        avg_size     =("size","mean"),
+        unit_types   =("unit_type", lambda x: ", ".join(sorted(x.unique().tolist()))),
+        has_pool     =("has_pool","max"),
+        has_parking  =("has_parking","max"),
+        has_terrace  =("has_terrace","max"),
+        has_lift     =("has_lift","max"),
+    ).reset_index()
+    for c in ["avg_price","min_price","max_price"]:
+        grp[c] = grp[c].round(0)
+    grp["avg_price_m2"] = grp["avg_price_m2"].round(1)
+    grp["avg_size"]     = grp["avg_size"].round(1)
+    grp["esg_grade"]    = grp["esg_grade"].where(pd.notna(grp["esg_grade"]), None)
+
+    # Attach coords
+    records = grp.to_dict(orient="records")
+    for r in records:
+        lat, lng = _listing_coords(int(r["listing_id"]), str(r["municipality"]))
+        r["lat"] = lat or 39.47
+        r["lng"] = lng or -0.38
+
+    summary = {
+        "count": len(records),
+        "units": int(dp["sub_listing_id"].nunique()),
+        "avg_price": round(float(dp["price"].mean())) if len(dp) else 0,
+        "avg_price_m2": round(float(dp["price_per_m2"].mean()), 1) if len(dp) else 0,
+    }
+    return safe_json({"listings": records, "summary": summary,
+                      "periods": {"prev": PREV_PERIOD, "latest": LATEST_PERIOD}})
+
+
+@app.get("/delisted/apartments/{listing_id}")
+def delisted_apartments(listing_id: int):
+    """All apartments from a delisted listing (from prev period)."""
+    if not PREV_PERIOD:
+        return safe_json({"apartments": []})
+    dp = df[(df["listing_id"]==listing_id) & (df["period"]==PREV_PERIOD)]
+    if dp.empty:
+        return safe_json({"apartments": []})
+
+    apt_cols = ["sub_listing_id","unit_type","price","size","price_per_m2",
+                "floor","floor_num","bedrooms","bathrooms",
+                "has_terrace","has_parking","has_pool","has_lift","has_ac","unit_url"]
+    apts = dp[[c for c in apt_cols if c in dp.columns]].copy()
+    for col in ["floor_num","bedrooms","bathrooms"]:
+        if col in apts.columns:
+            apts[col] = pd.to_numeric(apts[col], errors="coerce").astype("Int64")
+    for col in ["has_terrace","has_parking","has_pool","has_lift","has_ac"]:
+        if col in apts.columns:
+            apts[col] = apts[col].fillna(False).astype(bool)
+    apts = apts.sort_values(["unit_type","price"])
+    records = _clean(apts.to_dict(orient="records"))
+    records = [{k:(None if str(v)=="<NA>" else v) for k,v in r.items()} for r in records]
+
+    meta = dp.iloc[0]
+    return safe_json({
+        "property_name": str(meta["property_name"]),
+        "municipality":  str(meta["municipality"]),
+        "developer":     str(meta["developer"]) if pd.notna(meta.get("developer")) else None,
+        "last_period":   PREV_PERIOD,
+        "apartments":    records,
     })
