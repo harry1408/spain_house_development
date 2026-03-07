@@ -537,6 +537,7 @@ def drilldown_listing(listing_id: int):
         "listing_trend": listing_trend.drop("period_ord",axis=1).to_dict(orient="records"),
         "unit_type_trend": ut_trend.drop("period_ord",axis=1).to_dict(orient="records"),
         "apt_trend":     apt_trend_records,
+        "unit_url_sample": str(dl["unit_url"].dropna().iloc[0]) if "unit_url" in dl.columns and dl["unit_url"].notna().any() else None,
     })
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -913,3 +914,33 @@ def delisted_apartments(listing_id: int):
         "last_period":   PREV_PERIOD,
         "apartments":    records,
     })
+
+# ══════════════════════════════════════════════════════════════════════════
+#  LISTING PHOTOS — read from images column in data
+# ══════════════════════════════════════════════════════════════════════════
+@app.get("/listing/photos/{listing_id}")
+def listing_photos(listing_id: int):
+    import re as _re
+    rows = df[df["listing_id"] == listing_id]
+    if rows.empty or "images" not in rows.columns:
+        return safe_json({"photos": []})
+
+    seen, photos = set(), []
+    for raw in rows["images"].dropna():
+        s = str(raw).strip().strip("[]")
+        for url in s.split(","):
+            url = url.strip()
+            if not url.startswith("http"):
+                continue
+            m = _re.search(r'/([a-f0-9]+)\.(webp|jpg)$', url)
+            key = m.group(1) if m else url
+            if key in seen:
+                continue
+            seen.add(key)
+            photos.append(url)
+            if len(photos) >= 5:
+                break
+        if len(photos) >= 5:
+            break
+
+    return safe_json({"photos": photos})
