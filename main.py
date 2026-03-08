@@ -15,6 +15,16 @@ def _clean(obj):
     if isinstance(obj, list):  return [_clean(i) for i in obj]
     if isinstance(obj, dict):  return {k: _clean(v) for k, v in obj.items()}
     if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)): return None
+    # pandas nullable integers/booleans (Int64, boolean dtype) → unwrap via .item()
+    if hasattr(obj, 'item'):
+        try: return _clean(obj.item())
+        except: pass
+    # pandas NA / NaT / NaN scalar
+    try:
+        if pd.isna(obj): return None
+    except (TypeError, ValueError): pass
+    # numpy arrays
+    if hasattr(obj, 'tolist'): return _clean(obj.tolist())
     return obj
 
 def safe_json(data):
@@ -301,10 +311,11 @@ def size_vs_price(municipality: Optional[List[str]] = Query(None),
     if len(d2) > 800: d2 = d2.sample(800, random_state=42)
     rows = []
     for _, r in d2.iterrows():
-        lat, lng = _listing_coords(r["listing_id"], str(r["municipality"]) if pd.notna(r.get("municipality")) else "")
+        lat, lng, map_url = _listing_coords(r["listing_id"], str(r["municipality"]) if pd.notna(r.get("municipality")) else "")
         row = {c: r[c] for c in d2.columns}
         row["lat"] = lat or 39.47
         row["lng"] = lng or -0.38
+        row["map_url"] = map_url
         for k in list(row.keys()):
             v = row[k]
             if hasattr(v, 'item'): row[k] = v.item()
@@ -472,7 +483,7 @@ def drilldown_listing(listing_id: int):
     apt_records = _clean(apts.to_dict(orient="records"))
     apt_records = [{k:(None if str(v)=="<NA>" else v) for k,v in r.items()} for r in apt_records]
     # attach coords (same for all apts in same listing)
-    lat, lng = _listing_coords(listing_id, str(meta["municipality"]) if pd.notna(meta.get("municipality")) else "")
+    lat, lng, map_url = _listing_coords(listing_id, str(meta["municipality"]) if pd.notna(meta.get("municipality")) else "")
     for r in apt_records:
         r["lat"] = lat or 39.47
         r["lng"] = lng or -0.38
@@ -654,22 +665,32 @@ def _get_coords(municipality):
             return v
     return None, None
 
-# Per-listing precise coordinates (pre-geocoded from city_area)
-import os as _os
-_LISTING_COORDS_PATH = _os.path.join(_os.path.dirname(__file__), "listing_coords.json")
-try:
-    with open(_LISTING_COORDS_PATH) as _f:
-        LISTING_COORDS = {int(k): v for k, v in json.load(_f).items()}
-except Exception:
-    LISTING_COORDS = {}
+# Per-listing precise coordinates — built from latitude/longitude columns in Excel
+# Falls back to municipality geocoding for listings without coords
+def _build_listing_coords():
+    coords = {}
+    for lid, grp in _raw.groupby("listing_id"):
+        row = grp.iloc[0]
+        lat = row.get("latitude") if "latitude" in grp.columns else None
+        lng = row.get("longitude") if "longitude" in grp.columns else None
+        map_url = row.get("map") if "map" in grp.columns else None
+        if pd.notna(lat) and pd.notna(lng) and float(lat) != 0 and float(lng) != 0:
+            coords[int(lid)] = {
+                "lat": float(lat),
+                "lng": float(lng),
+                "map_url": str(map_url) if pd.notna(map_url) else None,
+            }
+    return coords
+
+LISTING_COORDS = _build_listing_coords()
 
 def _listing_coords(listing_id, municipality=""):
-    """Return (lat, lng) — per-listing precise coords first, then municipality fallback."""
+    """Return (lat, lng, map_url) — from Excel coords first, then municipality fallback."""
     c = LISTING_COORDS.get(int(listing_id) if listing_id else -1)
     if c:
-        return c["lat"], c["lng"]
+        return c["lat"], c["lng"], c.get("map_url")
     lat, lng = _get_coords(str(municipality))
-    return (lat or 39.47), (lng or -0.38)
+    return (lat or 39.47), (lng or -0.38), None
 
 def _parse_address(city_area):
     """Return {street, municipality, comarca, province} from city_area string."""
@@ -711,7 +732,7 @@ def map_listings(municipality: Optional[List[str]] = Query(None)):
     ).reset_index()
     rows = []
     for _, r in grp.iterrows():
-        lat, lng = _listing_coords(r["listing_id"], str(r["municipality"]) if pd.notna(r["municipality"]) else "")
+        lat, lng, map_url = _listing_coords(r["listing_id"], str(r["municipality"]) if pd.notna(r["municipality"]) else "")
         addr = _parse_address(r["city_area"])
         rows.append({
             "listing_id":  int(r["listing_id"]),
@@ -719,7 +740,7 @@ def map_listings(municipality: Optional[List[str]] = Query(None)):
             "municipality": str(r["municipality"]) if pd.notna(r["municipality"]) else "",
             "comarca":     str(r["comarca"])     if pd.notna(r["comarca"])     else "",
             "street":      addr.get("street","") or "",
-            "lat": lat, "lng": lng,
+            "lat": lat, "lng": lng, "map_url": map_url,
             "units":     int(r["units"]),
             "avg_price": round(float(r["avg_price"])),
             "min_price": int(r["min_price"]),
@@ -755,12 +776,13 @@ def nearby_listings(listing_id: int):
     # Add coords
     rows = []
     for _, r in grp.iterrows():
-        lat, lng = _listing_coords(r["listing_id"], str(r["municipality"]))
+        lat, lng, map_url = _listing_coords(r["listing_id"], str(r["municipality"]))
         addr = _parse_address(r["city_area"])
         rows.append({
             **{k: (_clean(r[k]) if not isinstance(r[k], (str,bool,type(None))) else r[k]) for k in r.index},
             "is_current": int(r["listing_id"]) == listing_id,
             "lat": lat or 39.47, "lng": lng or -0.38,
+            "map_url": map_url,
             "street": addr.get("street","") or "",
             "addr_comarca": str(comarca),
         })
@@ -788,11 +810,12 @@ def nearby_apartments(listing_id: int, unit_type: Optional[str] = None):
 
     rows = []
     for _, r in apts.iterrows():
-        lat, lng = _listing_coords(r["listing_id"], str(r["municipality"]))
+        lat, lng, map_url = _listing_coords(r["listing_id"], str(r["municipality"]))
         addr = _parse_address(r["city_area"])
         row = {c: r[c] for c in apt_cols}
         row["lat"] = lat or 39.47
         row["lng"] = lng or -0.38
+        row["map_url"] = map_url
         row["street"] = addr.get("street","") or ""
         row["is_current_listing"] = int(r["listing_id"]) == listing_id
         for k in row:
@@ -813,7 +836,7 @@ def listing_meta(listing_id: int):
     d = df[df["listing_id"]==listing_id]
     if d.empty: return safe_json({})
     r = d.iloc[0]
-    lat, lng = _listing_coords(listing_id, str(r["municipality"]))
+    lat, lng, map_url = _listing_coords(listing_id, str(r["municipality"]))
     addr = _parse_address(r["city_area"])
     return safe_json({
         "listing_id":   int(listing_id),
@@ -822,7 +845,7 @@ def listing_meta(listing_id: int):
         "city_area":    str(r["city_area"])    if pd.notna(r["city_area"])    else "",
         "comarca":      str(r["comarca"])      if pd.notna(r["comarca"])      else "",
         "street":       addr.get("street","") or "",
-        "lat": lat or 39.47, "lng": lng or -0.38,
+        "lat": lat or 39.47, "lng": lng or -0.38, "map_url": map_url,
     })
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -869,7 +892,7 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
     # Attach coords
     records = grp.to_dict(orient="records")
     for r in records:
-        lat, lng = _listing_coords(int(r["listing_id"]), str(r["municipality"]))
+        lat, lng, map_url = _listing_coords(int(r["listing_id"]), str(r["municipality"]))
         r["lat"] = lat or 39.47
         r["lng"] = lng or -0.38
 
@@ -920,16 +943,27 @@ def delisted_apartments(listing_id: int):
 # ══════════════════════════════════════════════════════════════════════════
 @app.get("/listing/photos/{listing_id}")
 def listing_photos(listing_id: int):
-    import re as _re
+    import re as _re, ast as _ast
     rows = df[df["listing_id"] == listing_id]
     if rows.empty or "images" not in rows.columns:
         return safe_json({"photos": []})
 
     seen, photos = set(), []
     for raw in rows["images"].dropna():
-        s = str(raw).strip().strip("[]")
-        for url in s.split(","):
-            url = url.strip()
+        s = str(raw).strip()
+        if not s or s == "0":
+            continue
+        # Try parsing as Python list literal e.g. "['url1', 'url2']"
+        urls = []
+        try:
+            parsed = _ast.literal_eval(s)
+            if isinstance(parsed, list):
+                urls = [str(u).strip() for u in parsed]
+        except Exception:
+            # Fallback: strip brackets and split on comma
+            urls = [u.strip().strip("'").strip('"') for u in s.strip("[]").split(",")]
+
+        for url in urls:
             if not url.startswith("http"):
                 continue
             m = _re.search(r'/([a-f0-9]+)\.(webp|jpg)$', url)
