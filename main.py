@@ -265,9 +265,13 @@ def price_distribution(municipality: Optional[List[str]] = Query(None),
     bins   = [0,150000,200000,250000,300000,400000,500000,700000,10000000]
     labels = ["<150k","150-200k","200-250k","250-300k","300-400k","400-500k","500-700k",">700k"]
     d2 = d.copy(); d2["bin"] = pd.cut(d2["price"], bins=bins, labels=labels)
-    result = d2.groupby("bin", observed=True).agg(count=("price","size"), avg_price_m2=("price_per_m2","mean")).reset_index()
-    result["avg_price_m2"] = result["avg_price_m2"].round(0)
-    return safe_json(result.to_dict(orient="records"))
+    result = d2.groupby("bin", observed=True).agg(count=("price","size")).reset_index()
+    m2_bins   = [0,1000,1500,2000,2500,3000,3500,4000,5000,6000,100000]
+    m2_labels = ["<1k","1-1.5k","1.5-2k","2-2.5k","2.5-3k","3-3.5k","3.5-4k","4-5k","5-6k",">6k"]
+    d3 = d[d["price_per_m2"].notna() & (d["price_per_m2"] > 0)].copy()
+    d3["bin"] = pd.cut(d3["price_per_m2"], bins=m2_bins, labels=m2_labels)
+    m2_result = d3.groupby("bin", observed=True).agg(count=("price_per_m2","size")).reset_index()
+    return safe_json({"price_dist": result.to_dict(orient="records"), "m2_dist": m2_result.to_dict(orient="records")})
 
 @app.get("/charts/municipality-overview")
 def municipality_overview(municipality: Optional[List[str]] = Query(None),
@@ -438,9 +442,16 @@ def drilldown_municipality(municipality: str):
     bins   = [0,150000,200000,250000,300000,400000,500000,700000,10000000]
     labels = ["<150k","150-200k","200-250k","250-300k","300-400k","400-500k","500-700k",">700k"]
     d2 = dl.copy(); d2["bin"] = pd.cut(d2["price"], bins=bins, labels=labels)
-    price_dist_grp = d2.groupby("bin", observed=True).agg(count=("price","size"), avg_price_m2=("price_per_m2","mean")).reset_index()
-    price_dist_grp["avg_price_m2"] = price_dist_grp["avg_price_m2"].round(0)
+    price_dist_grp = d2.groupby("bin", observed=True).agg(count=("price","size")).reset_index()
     price_dist = price_dist_grp
+
+    # Separate €/m² distribution with proper m² bins
+    m2_bins   = [0,1000,1500,2000,2500,3000,3500,4000,5000,6000,100000]
+    m2_labels = ["<1k","1-1.5k","1.5-2k","2-2.5k","2.5-3k","3-3.5k","3.5-4k","4-5k","5-6k",">6k"]
+    d3 = dl[dl["price_per_m2"].notna() & (dl["price_per_m2"] > 0)].copy()
+    d3["bin"] = pd.cut(d3["price_per_m2"], bins=m2_bins, labels=m2_labels)
+    m2_dist_grp = d3.groupby("bin", observed=True).agg(count=("price_per_m2","size")).reset_index()
+    m2_dist = m2_dist_grp
 
     # month-over-month trend for this municipality
     trend = d.groupby(["period","period_ord"]).agg(
@@ -456,6 +467,7 @@ def drilldown_municipality(municipality: str):
                       "unit_type_mix": mix.to_dict(orient="records"),
                       "unit_type_stats": ut_stats.to_dict(orient="records"),
                       "price_dist": price_dist.to_dict(orient="records"),
+                      "m2_dist": m2_dist.to_dict(orient="records"),
                       "trend": trend.drop("period_ord",axis=1).to_dict(orient="records")})
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -734,6 +746,8 @@ def map_listings(municipality: Optional[List[str]] = Query(None)):
     for _, r in grp.iterrows():
         lat, lng, map_url = _listing_coords(r["listing_id"], str(r["municipality"]) if pd.notna(r["municipality"]) else "")
         addr = _parse_address(r["city_area"])
+        # Skip listings without real coords (fallback would cluster at 39.47,-0.38)
+        if not lat or not lng: continue
         rows.append({
             "listing_id":  int(r["listing_id"]),
             "property_name": str(r["property_name"]),
@@ -747,18 +761,38 @@ def map_listings(municipality: Optional[List[str]] = Query(None)):
         })
     return safe_json(rows)
 
+
+def _haversine_km(lat1, lng1, lat2, lng2):
+    """Distance in km between two lat/lng points."""
+    import math as _math
+    R = 6371
+    dlat = _math.radians(lat2 - lat1)
+    dlng = _math.radians(lng2 - lng1)
+    a = _math.sin(dlat/2)**2 + _math.cos(_math.radians(lat1)) * _math.cos(_math.radians(lat2)) * _math.sin(dlng/2)**2
+    return R * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1-a))
+
 # ══════════════════════════════════════════════════════════════════════════
 #  NEARBY COMPARISON  — same comarca, different listings
 # ══════════════════════════════════════════════════════════════════════════
 @app.get("/nearby/listings/{listing_id}")
-def nearby_listings(listing_id: int):
+def nearby_listings(listing_id: int, radius_km: Optional[float] = None):
     base = df[df["listing_id"]==listing_id]
     if base.empty: return safe_json({"comarca":"","listings":[]})
     comarca = base["comarca"].iloc[0]
-    if pd.isna(comarca): return safe_json({"comarca":"","listings":[]})
+    base_lat, base_lng, _ = _listing_coords(listing_id, str(base.iloc[0]["municipality"]))
 
-    # All listings in same comarca (latest period)
-    d = df[(df["comarca"]==comarca) & df["_is_latest"]]
+    # Filter by radius if provided, else fall back to comarca
+    if radius_km and base_lat and base_lng:
+        # Use only listings that have real coords (not fallback)
+        nearby_ids = [
+            lid for lid, c in LISTING_COORDS.items()
+            if _haversine_km(base_lat, base_lng, c["lat"], c["lng"]) <= radius_km
+        ]
+        d = df[df["listing_id"].isin(nearby_ids) & df["_is_latest"]]
+    elif pd.isna(comarca):
+        return safe_json({"comarca":"","listings":[]})
+    else:
+        d = df[(df["comarca"]==comarca) & df["_is_latest"]]
     grp = d.groupby(["listing_id","property_name","municipality","city_area","developer","delivery_date","esg_grade"], dropna=False).agg(
         units        = ("sub_listing_id","nunique"),
         avg_price    = ("price","mean"),
@@ -789,14 +823,23 @@ def nearby_listings(listing_id: int):
     return safe_json({"comarca": str(comarca), "listings": rows})
 
 @app.get("/nearby/apartments/{listing_id}")
-def nearby_apartments(listing_id: int, unit_type: Optional[str] = None):
-    """Compare apartments across nearby listings (same comarca)."""
+def nearby_apartments(listing_id: int, unit_type: Optional[str] = None, radius_km: Optional[float] = None):
+    """Compare apartments across nearby listings (same comarca or radius)."""
     base = df[df["listing_id"]==listing_id]
     if base.empty: return safe_json({"comarca":"","apartments":[]})
     comarca = base["comarca"].iloc[0]
-    if pd.isna(comarca): return safe_json({"comarca":"","apartments":[]})
+    base_lat, base_lng, _ = _listing_coords(listing_id, str(base.iloc[0]["municipality"]))
 
-    d = df[(df["comarca"]==comarca) & df["_is_latest"]].copy()
+    if radius_km and base_lat and base_lng:
+        nearby_ids = [
+            lid for lid, c in LISTING_COORDS.items()
+            if _haversine_km(base_lat, base_lng, c["lat"], c["lng"]) <= radius_km
+        ]
+        d = df[df["listing_id"].isin(nearby_ids) & df["_is_latest"]].copy()
+    elif pd.isna(comarca):
+        return safe_json({"comarca":"","apartments":[]})
+    else:
+        d = df[(df["comarca"]==comarca) & df["_is_latest"]].copy()
     if unit_type:
         d = d[d["unit_type"]==unit_type]
 
