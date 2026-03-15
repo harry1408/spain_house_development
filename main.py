@@ -334,7 +334,7 @@ def size_vs_price(municipality: Optional[List[str]] = Query(None),
 def market_trend(municipality: Optional[List[str]] = Query(None),
                  province:     Optional[List[str]] = Query(None),
                  unit_type:    Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, province=province)
+    d = _filter(municipality, unit_type, province=province, df_src=_full)
     r = d.groupby(["period","period_ord"]).agg(
         avg_price    =("price","mean"),
         avg_price_m2 =("price_per_m2","mean"),
