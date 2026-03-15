@@ -1015,9 +1015,148 @@ def listing_photos(listing_id: int):
                 continue
             seen.add(key)
             photos.append(url)
-            if len(photos) >= 5:
-                break
-        if len(photos) >= 5:
-            break
 
     return safe_json({"photos": photos})
+
+# ── Search page endpoints ─────────────────────────────────────────────────
+
+@app.get("/search/options")
+def search_options(municipality: Optional[List[str]] = Query(None)):
+    """Return all municipalities and all area/locality/street parts from city_area."""
+    munis = sorted(_raw["municipality"].dropna().unique().tolist())
+
+    base = _raw.copy()
+    if municipality:
+        base = base[base["municipality"].isin(municipality)]
+
+    # Always exclude province-level names and municipality names
+    exclude = {"valencia", "alicante", "spain", "españa", "comunitat valenciana"}
+    all_munis = {m.lower() for m in _raw["municipality"].dropna().unique()}
+
+    locations = set()
+    for val in base["city_area"].dropna():
+        parts = [p.strip() for p in str(val).split(",")]
+        # Skip last part (always province: Valencia/Alicante)
+        for part in parts[:-1]:
+            clean = re.sub(r'\s+NN\s*$', '', part, flags=re.IGNORECASE).strip()
+            clean = re.sub(r'\s+\d+[a-zA-Z]*\s*$', '', clean).strip()
+            if len(clean) < 3:
+                continue
+            if clean.lower() in exclude:
+                continue
+            if clean.lower() in all_munis:
+                continue  # skip — already in municipality dropdown
+            if re.match(r'^\d+$', clean):
+                continue
+            locations.add(clean)
+
+    return safe_json({
+        "municipalities": munis,
+        "locations": sorted(locations),
+    })
+
+
+@app.get("/search/listings")
+def search_listings(
+    municipality: Optional[List[str]] = Query(None),
+    street:       Optional[List[str]] = Query(None),
+    radius_km:    Optional[float]     = Query(None),
+    lat:          Optional[float]     = Query(None),
+    lng:          Optional[float]     = Query(None),
+    unit_type:    Optional[List[str]] = Query(None),
+    min_price:    Optional[float]     = Query(None),
+    max_price:    Optional[float]     = Query(None),
+    min_m2:       Optional[float]     = Query(None),
+    max_m2:       Optional[float]     = Query(None),
+    esg:          Optional[List[str]] = Query(None),
+):
+    def _parse_esg_grade(val):
+        """Extract best (lowest) grade letter from 'Consumption: A, Emissions: B' etc."""
+        if not val or str(val).lower() in ("nan", "unknown", ""):
+            return None
+        m = re.findall(r':\s*([A-G])', str(val), re.IGNORECASE)
+        if m:
+            return sorted(m, key=lambda g: "ABCDEFG".index(g.upper()))[0].upper()
+        m2 = re.match(r'^([A-G])$', str(val).strip(), re.IGNORECASE)
+        return m2.group(1).upper() if m2 else None
+
+    d = _raw.copy()
+
+    # ESG filter — compare parsed grade
+    if esg:
+        d = d[d["esg_certificate"].apply(lambda v: _parse_esg_grade(v) in esg)]
+
+    if municipality: d = d[d["municipality"].isin(municipality)]
+    if unit_type:    d = d[d["unit_type"].isin(unit_type)]
+
+    # Area/locality/street filter — match against city_area
+    if street:
+        def _street_match(city_area_val):
+            v = str(city_area_val).lower()
+            for s in street:
+                s_clean = re.sub(r'\s+nn\s*$', '', s, flags=re.IGNORECASE).strip().lower()
+                if s_clean in v:
+                    return True
+            return False
+        mask = d["city_area"].apply(_street_match)
+        d = d[mask]
+
+    # Price filters
+    if min_price: d = d[d["price"] >= min_price]
+    if max_price: d = d[d["price"] <= max_price]
+    if min_m2:    d = d[d["price_per_m2"] >= min_m2]
+    if max_m2:    d = d[d["price_per_m2"] <= max_m2]
+
+    if d.empty:
+        return safe_json({"listings": [], "total": 0})
+
+    # Group to listing level
+    # Build safe agg dict — only include columns that exist
+    _agg = dict(
+        property_name  =("property_name","first"),
+        municipality   =("municipality","first"),
+        province       =("province","first"),
+        developer      =("developer","first"),
+        units          =("sub_listing_id","nunique"),
+        avg_price      =("price","mean"),
+        avg_price_m2   =("price_per_m2","mean"),
+        min_price      =("price","min"),
+        max_price      =("price","max"),
+        unit_types     =("unit_type", lambda x: ", ".join(sorted(x.dropna().unique()))),
+        city_area      =("city_area","first"),
+    )
+    if "esg_certificate" in d.columns:
+        _agg["esg_certificate"] = ("esg_certificate","first")
+    grp = d.groupby("listing_id").agg(**_agg).reset_index()
+    grp["avg_price"]    = grp["avg_price"].round(0)
+    grp["avg_price_m2"] = grp["avg_price_m2"].round(1)
+    grp["min_price"]    = grp["min_price"].round(0)
+    grp["max_price"]    = grp["max_price"].round(0)
+
+    # Attach coords and parsed ESG grade
+    rows = []
+    for _, r in grp.iterrows():
+        lid = int(r["listing_id"])
+        lat_v, lng_v, _ = _listing_coords(lid, r["municipality"])
+        row = {**{k: _clean(v) for k, v in r.items()}, "lat": lat_v, "lng": lng_v}
+        row["esg_grade"] = _parse_esg_grade(r.get("esg_certificate", ""))
+        rows.append(row)
+
+    # Radius filter — compute centroid from all rows that have real coords
+    if radius_km:
+        # Use provided lat/lng or compute centroid of current results
+        if lat is not None and lng is not None:
+            c_lat, c_lng = lat, lng
+        else:
+            coords = [(r["lat"], r["lng"]) for r in rows if r["lat"] and r["lng"]]
+            if coords:
+                c_lat = sum(c[0] for c in coords) / len(coords)
+                c_lng = sum(c[1] for c in coords) / len(coords)
+            else:
+                c_lat, c_lng = None, None
+
+        if c_lat and c_lng:
+            rows = [r for r in rows if r["lat"] and r["lng"]
+                    and _haversine_km(c_lat, c_lng, r["lat"], r["lng"]) <= radius_km]
+
+    return safe_json({"listings": rows, "total": len(rows)})
