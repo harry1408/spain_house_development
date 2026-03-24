@@ -61,6 +61,20 @@ print(f"[data] Loading  : {[os.path.basename(f) for f in _xlsx_files]}")
 _raw = pd.concat([pd.read_excel(f) for f in _xlsx_files], ignore_index=True)
 print(f"[data] Rows: {len(_raw):,}  |  provinces: {sorted(_raw['province'].dropna().unique().tolist())}")
 
+# Load geocoded streets CSV if present
+_STREETS_CSV = os.path.join(_DATA_DIR, "combined_geocoded.csv")
+_GEOCODED_STREETS = pd.DataFrame()
+if os.path.exists(_STREETS_CSV):
+    try:
+        _GEOCODED_STREETS = pd.read_csv(_STREETS_CSV)
+        # Normalise street names: clean encoding issues
+        _GEOCODED_STREETS["street"] = _GEOCODED_STREETS["street"].apply(
+            lambda s: str(s).encode("latin1").decode("utf-8", errors="replace") if isinstance(s, str) else s
+        )
+        print(f"[data] Geocoded streets loaded: {len(_GEOCODED_STREETS):,}")
+    except Exception as e:
+        print(f"[data] Could not load geocoded streets: {e}")
+
 # Canonical snapshot label: "Feb 2026"
 _raw["period"] = _raw["Month"].astype(str) + " " + _raw["Year"].astype(str)
 _raw["period_ord"] = _raw["Month"].map(MONTH_ORDER) + (_raw["Year"].astype(int)-2000)*100
@@ -1022,7 +1036,7 @@ def listing_photos(listing_id: int):
 
 @app.get("/search/options")
 def search_options(municipality: Optional[List[str]] = Query(None)):
-    """Return all municipalities and all area/locality/street parts from city_area."""
+    """Return all municipalities and all area/locality/street parts from city_area + geocoded CSV."""
     munis = sorted(_raw["municipality"].dropna().unique().tolist())
 
     base = _raw.copy()
@@ -1034,20 +1048,32 @@ def search_options(municipality: Optional[List[str]] = Query(None)):
     all_munis = {m.lower() for m in _raw["municipality"].dropna().unique()}
 
     locations = set()
+
+    # Extract from city_area column
     for val in base["city_area"].dropna():
         parts = [p.strip() for p in str(val).split(",")]
-        # Skip last part (always province: Valencia/Alicante)
         for part in parts[:-1]:
             clean = re.sub(r'\s+NN\s*$', '', part, flags=re.IGNORECASE).strip()
             clean = re.sub(r'\s+\d+[a-zA-Z]*\s*$', '', clean).strip()
-            if len(clean) < 3:
-                continue
-            if clean.lower() in exclude:
-                continue
-            if clean.lower() in all_munis:
-                continue  # skip — already in municipality dropdown
-            if re.match(r'^\d+$', clean):
-                continue
+            if len(clean) < 3: continue
+            if clean.lower() in exclude: continue
+            if clean.lower() in all_munis: continue
+            if re.match(r'^\d+$', clean): continue
+            locations.add(clean)
+
+    # Add geocoded streets from CSV
+    if not _GEOCODED_STREETS.empty:
+        geo = _GEOCODED_STREETS.copy()
+        if municipality:
+            # Filter to matching municipalities (case-insensitive)
+            munis_lower = {m.lower() for m in municipality}
+            geo = geo[geo["municipality"].str.lower().isin(munis_lower)]
+        for val in geo["street"].dropna():
+            clean = str(val).strip()
+            clean = re.sub(r'\s+\d+[a-zA-Z]*\s*$', '', clean).strip()
+            if len(clean) < 3: continue
+            if clean.lower() in exclude: continue
+            if clean.lower() in all_munis: continue
             locations.add(clean)
 
     return safe_json({
@@ -1089,8 +1115,19 @@ def search_listings(
     if municipality: d = d[d["municipality"].isin(municipality)]
     if unit_type:    d = d[d["unit_type"].isin(unit_type)]
 
-    # Area/locality/street filter — match against city_area
+    # Area/locality/street filter — match against city_area OR use geocoded coords
     if street:
+        # Check if any selected street is in the geocoded CSV — if so, use its coords as center
+        geo_centers = []
+        if not _GEOCODED_STREETS.empty:
+            for s in street:
+                s_lower = s.strip().lower()
+                match = _GEOCODED_STREETS[_GEOCODED_STREETS["street"].str.lower().str.strip() == s_lower]
+                if not match.empty:
+                    row = match.iloc[0]
+                    if pd.notna(row.get("latitude")) and pd.notna(row.get("longitude")):
+                        geo_centers.append((float(row["latitude"]), float(row["longitude"])))
+
         def _street_match(city_area_val):
             v = str(city_area_val).lower()
             for s in street:
@@ -1099,7 +1136,22 @@ def search_listings(
                     return True
             return False
         mask = d["city_area"].apply(_street_match)
-        d = d[mask]
+        d_matched = d[mask]
+
+        # If geocoded streets found and radius_km provided, also include nearby listings
+        if geo_centers and radius_km:
+            geo_listing_ids = set()
+            for c_lat, c_lng in geo_centers:
+                for lid, c in LISTING_COORDS.items():
+                    if _haversine_km(c_lat, c_lng, c["lat"], c["lng"]) <= radius_km:
+                        geo_listing_ids.add(lid)
+            d_geo = d[d["listing_id"].isin(geo_listing_ids)]
+            d = pd.concat([d_matched, d_geo]).drop_duplicates(subset=["listing_id"]) if not d_geo.empty else d_matched
+        elif geo_centers and not radius_km:
+            # No radius — still do city_area match but also store centers for auto-centering
+            d = d_matched if not d_matched.empty else d[d["city_area"].isna() == False].iloc[:0]  # empty if no match
+        else:
+            d = d_matched
 
     # Price filters
     if min_price: d = d[d["price"] >= min_price]
