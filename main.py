@@ -167,6 +167,23 @@ for _d in [df, _full]:
     for col in _am.columns:
         _d[col] = _am[col]
 
+# Property classification — from a 'property_type' column if present, else derived from unit_type
+_PROP_TYPE_COL = next((c for c in ["property_type","tipo_propiedad","property_class","type"] if c in df.columns), None)
+_UT_TO_CLASS = {t: "Apartment" for t in ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]}
+
+def _get_property_class(row):
+    if _PROP_TYPE_COL and pd.notna(row.get(_PROP_TYPE_COL)):
+        raw = str(row[_PROP_TYPE_COL]).strip().lower()
+        if any(x in raw for x in ["semi","pareado"]): return "Semi-detached"
+        if any(x in raw for x in ["detached","chalet","villa","casa","house"]): return "Detached"
+        if any(x in raw for x in ["terrace","terraced","adosado"]): return "Terraced"
+        if any(x in raw for x in ["country","rural","finca","cortijo"]): return "Country House"
+        if any(x in raw for x in ["apartment","flat","piso","duplex"]): return "Apartment"
+    return _UT_TO_CLASS.get(str(row.get("unit_type","")), "Apartment")
+
+for _d in [df, _full]:
+    _d["property_class"] = _d.apply(_get_property_class, axis=1)
+
 def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None, province=None, df_src=None):
     base = df_src if df_src is not None else df
     # When no period specified, use per-province latest (so all provinces show even if not in sync)
@@ -565,7 +582,7 @@ def drilldown_listing(listing_id: int):
         "municipality":  str(meta["municipality"]),
         "delivery_date": str(meta["delivery_date"]),
         "esg_grade":     str(meta["esg_grade"]) if pd.notna(meta["esg_grade"]) else None,
-        "description":   str(meta["description"]) if pd.notna(meta.get("description")) else None,
+        "description":   next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None),
         "total_units":   int(len(dl)),
         "periods":       PERIODS_SORTED,
         "apartments":    apt_records,
@@ -911,22 +928,24 @@ def listing_meta(listing_id: int):
 @app.get("/delisted/listings")
 def delisted_listings(province: Optional[List[str]] = Query(None),
                       municipality: Optional[List[str]] = Query(None)):
-    if not PREV_PERIOD:
-        return safe_json({"listings": [], "summary": {}, "periods": {"prev": None, "latest": None}})
-
     d = df.copy()
     if province:     d = d[d["province"].isin(province)]
     if municipality: d = d[d["municipality"].isin(municipality)]
 
-    prev_ids   = set(d[d["period"]==PREV_PERIOD]["listing_id"].unique())
-    latest_ids = set(d[d["period"]==LATEST_PERIOD]["listing_id"].unique())
-    delisted   = prev_ids - latest_ids
+    # Per-province aware: a listing is delisted if it has rows in a non-latest period
+    # but no rows in its province's latest period (uses the pre-computed _is_latest flag)
+    has_latest     = set(d[d["_is_latest"]]["listing_id"].unique())
+    has_non_latest = set(d[~d["_is_latest"]]["listing_id"].unique())
+    delisted       = has_non_latest - has_latest
 
     if not delisted:
         return safe_json({"listings": [], "summary": {"count":0,"units":0}, "periods": {"prev":PREV_PERIOD,"latest":LATEST_PERIOD}})
 
-    # Get data from the prev period for these listings
-    dp = d[(d["listing_id"].isin(delisted)) & (d["period"]==PREV_PERIOD)]
+    # For each delisted listing, use its most recent (non-latest) period snapshot
+    d_non_latest = d[(d["listing_id"].isin(delisted)) & (~d["_is_latest"])]
+    max_ords = d_non_latest.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_max_ord"})
+    d_non_latest = d_non_latest.merge(max_ords, on="listing_id")
+    dp = d_non_latest[d_non_latest["period_ord"] == d_non_latest["_max_ord"]].drop("_max_ord", axis=1)
     grp = dp.groupby(["listing_id","property_name","developer","municipality","city_area","esg_grade","delivery_date"], dropna=False).agg(
         units        =("sub_listing_id","nunique"),
         avg_price    =("price","mean"),
@@ -965,10 +984,14 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
 
 @app.get("/delisted/apartments/{listing_id}")
 def delisted_apartments(listing_id: int):
-    """All apartments from a delisted listing (from prev period)."""
-    if not PREV_PERIOD:
+    """All apartments from a delisted listing (from its last non-latest period)."""
+    d_lid = df[df["listing_id"]==listing_id]
+    d_non_latest = d_lid[~d_lid["_is_latest"]]
+    if d_non_latest.empty:
         return safe_json({"apartments": []})
-    dp = df[(df["listing_id"]==listing_id) & (df["period"]==PREV_PERIOD)]
+    # Use the most recent non-latest period for this listing
+    max_ord = d_non_latest["period_ord"].max()
+    dp = d_non_latest[d_non_latest["period_ord"] == max_ord]
     if dp.empty:
         return safe_json({"apartments": []})
 
@@ -991,7 +1014,7 @@ def delisted_apartments(listing_id: int):
         "property_name": str(meta["property_name"]),
         "municipality":  str(meta["municipality"]),
         "developer":     str(meta["developer"]) if pd.notna(meta.get("developer")) else None,
-        "last_period":   PREV_PERIOD,
+        "last_period":   str(dp.iloc[0]["period"]) if not dp.empty else PREV_PERIOD,
         "apartments":    records,
     })
 
@@ -1005,7 +1028,9 @@ def listing_photos(listing_id: int):
     if rows.empty or "images" not in rows.columns:
         return safe_json({"photos": []})
 
-    seen, photos = set(), []
+    _FLOORPLAN_RE = _re.compile(r'plano|planta|floor[_\-]plan|blueprint|fp_', _re.IGNORECASE)
+
+    seen, all_urls = set(), []
     for raw in rows["images"].dropna():
         s = str(raw).strip()
         if not s or s == "0":
@@ -1028,9 +1053,11 @@ def listing_photos(listing_id: int):
             if key in seen:
                 continue
             seen.add(key)
-            photos.append(url)
+            all_urls.append(url)
 
-    return safe_json({"photos": photos})
+    photos      = [u for u in all_urls if not _FLOORPLAN_RE.search(u)]
+    floor_plans = [u for u in all_urls if     _FLOORPLAN_RE.search(u)]
+    return safe_json({"photos": photos, "floor_plans": floor_plans})
 
 # ── Search page endpoints ─────────────────────────────────────────────────
 
@@ -1076,9 +1103,36 @@ def search_options(municipality: Optional[List[str]] = Query(None)):
             if clean.lower() in all_munis: continue
             locations.add(clean)
 
+    # Build street → coords lookup for geocoded streets (validated against municipality listings)
+    street_coords = {}
+    if not _GEOCODED_STREETS.empty:
+        geo_for_coords = _GEOCODED_STREETS.copy()
+        if municipality:
+            munis_lower = {m.lower() for m in municipality}
+            geo_for_coords = geo_for_coords[geo_for_coords["municipality"].str.lower().isin(munis_lower)]
+
+        # Compute municipality listing centroid for distance validation
+        _opt_centroid = None
+        if municipality:
+            _opt_lids = list(base["listing_id"].unique())[:100]
+            _opt_mc = [(LISTING_COORDS[lid]["lat"], LISTING_COORDS[lid]["lng"])
+                       for lid in _opt_lids if lid in LISTING_COORDS]
+            if _opt_mc:
+                _opt_centroid = (sum(c[0] for c in _opt_mc) / len(_opt_mc),
+                                 sum(c[1] for c in _opt_mc) / len(_opt_mc))
+
+        for _, row in geo_for_coords.iterrows():
+            if pd.notna(row.get("latitude")) and pd.notna(row.get("longitude")):
+                g_lat, g_lng = float(row["latitude"]), float(row["longitude"])
+                # Skip if geocoded location is >20 km from municipality listings
+                if _opt_centroid and _haversine_km(_opt_centroid[0], _opt_centroid[1], g_lat, g_lng) > 20:
+                    continue
+                street_coords[str(row["street"]).strip()] = {"lat": g_lat, "lng": g_lng}
+
     return safe_json({
         "municipalities": munis,
         "locations": sorted(locations),
+        "street_coords": street_coords,
     })
 
 
@@ -1116,17 +1170,30 @@ def search_listings(
     if unit_type:    d = d[d["unit_type"].isin(unit_type)]
 
     # Area/locality/street filter — match against city_area OR use geocoded coords
+    geo_centers = []  # populated inside street block, needed later for area_center
     if street:
         # Check if any selected street is in the geocoded CSV — if so, use its coords as center
-        geo_centers = []
         if not _GEOCODED_STREETS.empty:
+            # Build municipality listing centroid for distance validation
+            _muni_centroid = None
+            if municipality:
+                _lids = d["listing_id"].unique()[:100]  # sample for speed
+                _mc = [(LISTING_COORDS[lid]["lat"], LISTING_COORDS[lid]["lng"])
+                       for lid in _lids if lid in LISTING_COORDS]
+                if _mc:
+                    _muni_centroid = (sum(c[0] for c in _mc) / len(_mc),
+                                      sum(c[1] for c in _mc) / len(_mc))
+
             for s in street:
                 s_lower = s.strip().lower()
                 match = _GEOCODED_STREETS[_GEOCODED_STREETS["street"].str.lower().str.strip() == s_lower]
                 if not match.empty:
                     row = match.iloc[0]
                     if pd.notna(row.get("latitude")) and pd.notna(row.get("longitude")):
-                        geo_centers.append((float(row["latitude"]), float(row["longitude"])))
+                        g_lat, g_lng = float(row["latitude"]), float(row["longitude"])
+                        # Validate: skip if geocoded location is >20 km from municipality listings
+                        if _muni_centroid is None or _haversine_km(_muni_centroid[0], _muni_centroid[1], g_lat, g_lng) <= 20:
+                            geo_centers.append((g_lat, g_lng))
 
         def _street_match(city_area_val):
             v = str(city_area_val).lower()
@@ -1148,8 +1215,15 @@ def search_listings(
             d_geo = d[d["listing_id"].isin(geo_listing_ids)]
             d = pd.concat([d_matched, d_geo]).drop_duplicates(subset=["listing_id"]) if not d_geo.empty else d_matched
         elif geo_centers and not radius_km:
-            # No radius — still do city_area match but also store centers for auto-centering
-            d = d_matched if not d_matched.empty else d[d["city_area"].isna() == False].iloc[:0]  # empty if no match
+            # Geocoded street selected but no radius — use 2 km default to find nearby listings
+            _default_r = 2.0
+            geo_listing_ids = set()
+            for c_lat, c_lng in geo_centers:
+                for lid, c in LISTING_COORDS.items():
+                    if _haversine_km(c_lat, c_lng, c["lat"], c["lng"]) <= _default_r:
+                        geo_listing_ids.add(lid)
+            d_geo = d[d["listing_id"].isin(geo_listing_ids)]
+            d = pd.concat([d_matched, d_geo]).drop_duplicates(subset=["listing_id"]) if not d_geo.empty else d_matched
         else:
             d = d_matched
 
@@ -1160,7 +1234,11 @@ def search_listings(
     if max_m2:    d = d[d["price_per_m2"] <= max_m2]
 
     if d.empty:
-        return safe_json({"listings": [], "total": 0})
+        _early_center = None
+        if geo_centers:
+            _early_center = {"lat": sum(c[0] for c in geo_centers) / len(geo_centers),
+                             "lng": sum(c[1] for c in geo_centers) / len(geo_centers)}
+        return safe_json({"listings": [], "total": 0, "area_center": _early_center})
 
     # Group to listing level
     # Build safe agg dict — only include columns that exist
@@ -1211,4 +1289,51 @@ def search_listings(
             rows = [r for r in rows if r["lat"] and r["lng"]
                     and _haversine_km(c_lat, c_lng, r["lat"], r["lng"]) <= radius_km]
 
-    return safe_json({"listings": rows, "total": len(rows)})
+    # Per-unit-type stats from the apartment-level data (accurate counts + prices per type)
+    _ut_order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
+    _ut_agg = d.groupby("unit_type").agg(
+        count     =("sub_listing_id","nunique"),
+        min_price =("price","min"),
+        avg_price =("price","mean"),
+        max_price =("price","max"),
+        avg_size  =("size","mean"),
+        avg_pm2   =("price_per_m2","mean"),
+    ).reset_index()
+    for _c in ["min_price","avg_price","max_price"]: _ut_agg[_c] = _ut_agg[_c].round(0)
+    _ut_agg["avg_size"] = _ut_agg["avg_size"].round(1)
+    _ut_agg["avg_pm2"]  = _ut_agg["avg_pm2"].round(0)
+    _ut_agg["_s"] = _ut_agg["unit_type"].apply(lambda x: _ut_order.index(x) if x in _ut_order else 99)
+    _ut_agg = _ut_agg.sort_values("_s").drop("_s", axis=1)
+
+    # Determine area center for the frontend map
+    area_center = None
+    if street and geo_centers:
+        # Geocoded street: use its exact coordinates
+        area_center = {
+            "lat": sum(c[0] for c in geo_centers) / len(geo_centers),
+            "lng": sum(c[1] for c in geo_centers) / len(geo_centers),
+        }
+    elif street and rows:
+        # Neighbourhood/area name: use centroid of matched result listings (much tighter than full municipality)
+        matched_coords = [(r["lat"], r["lng"]) for r in rows if r.get("lat") and r.get("lng")]
+        if matched_coords:
+            area_center = {
+                "lat": sum(c[0] for c in matched_coords) / len(matched_coords),
+                "lng": sum(c[1] for c in matched_coords) / len(matched_coords),
+            }
+    elif municipality:
+        muni_lids = df[df["municipality"].isin(municipality)]["listing_id"].unique()
+        muni_coords = [
+            (LISTING_COORDS[lid]["lat"], LISTING_COORDS[lid]["lng"])
+            for lid in muni_lids
+            if lid in LISTING_COORDS
+        ]
+        if muni_coords:
+            area_center = {
+                "lat": sum(c[0] for c in muni_coords) / len(muni_coords),
+                "lng": sum(c[1] for c in muni_coords) / len(muni_coords),
+            }
+
+    return safe_json({"listings": rows, "total": len(rows),
+                      "unit_type_stats": _clean(_ut_agg.to_dict(orient="records")),
+                      "area_center": area_center})
