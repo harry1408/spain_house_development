@@ -150,15 +150,27 @@ def _parse_amenities(s):
     m_bed  = re.search(r"(\d+)\s+bedroom", s)
     m_bath = re.search(r"(\d+)\s+bathroom", s)
     m_fa   = re.search(r"(\d+)\s+m.*?floor area", s)
+    sl = s.lower()
+    if "semi-detached" in sl or "semidetached" in sl or "semi detached" in sl:
+        ht = "Semi-detached house"
+    elif "detached house" in sl:
+        ht = "Detached house"
+    elif "terraced house" in sl:
+        ht = "Terraced house"
+    elif "flat" in sl or "apartment" in sl:
+        ht = "Flat"
+    else:
+        ht = "Not Mentioned"
     return {"bedrooms": int(m_bed.group(1)) if m_bed else (0 if "No bedroom" in s else None),
             "bathrooms": int(m_bath.group(1)) if m_bath else None,
             "floor_area_m2": int(m_fa.group(1)) if m_fa else None,
             "has_terrace":  "Terrace" in s, "has_parking": "Parking" in s,
             "has_pool": "Swimming pool" in s, "has_garden": "Garden" in s,
             "has_lift": "lift" in s.lower(), "has_ac": "Air conditioning" in s,
-            "has_storage": "Storage room" in s, "has_wardrobes": "wardrobe" in s.lower()}
+            "has_storage": "Storage room" in s, "has_wardrobes": "wardrobe" in s.lower(),
+            "house_type": ht}
 
-for _d in [df, _full]:
+for _d in [_raw, df, _full]:
     _d["delivery_year"]    = _d["delivery_date"].apply(_year)
     _d["delivery_quarter"] = _d["delivery_date"].apply(_quarter)
     _d["esg_grade"]        = _d["esg_certificate"].apply(_esg)
@@ -517,6 +529,7 @@ def drilldown_listing(listing_id: int):
                 "has_terrace","has_parking","has_pool","has_garden",
                 "has_lift","has_ac","has_storage","has_wardrobes","unit_url"]
     if "last_updated" in dl.columns: apt_cols = apt_cols + ["last_updated"]
+    if "house_type"   in dl.columns: apt_cols = apt_cols + ["house_type"]
     apts = dl[apt_cols].copy()
     for col in ["floor_num","bedrooms","bathrooms","floor_area_m2"]:
         apts[col] = pd.to_numeric(apts[col], errors="coerce").astype("Int64")
@@ -622,6 +635,7 @@ def price_matrix(listing_id: int):
             "has_storage":bool(meta.get("has_storage",False)),
             "unit_url":   str(meta["unit_url"])     if pd.notna(meta.get("unit_url")) else None,
             "last_updated": str(meta["last_updated"]) if pd.notna(meta.get("last_updated")) else None,
+            "house_type": str(meta["house_type"]) if pd.notna(meta.get("house_type")) else None,
         }
 
         price_vals = []
@@ -1149,6 +1163,7 @@ def search_listings(
     min_m2:       Optional[float]     = Query(None),
     max_m2:       Optional[float]     = Query(None),
     esg:          Optional[List[str]] = Query(None),
+    house_type:   Optional[List[str]] = Query(None),
 ):
     def _parse_esg_grade(val):
         """Extract best (lowest) grade letter from 'Consumption: A, Emissions: B' etc."""
@@ -1168,6 +1183,7 @@ def search_listings(
 
     if municipality: d = d[d["municipality"].isin(municipality)]
     if unit_type:    d = d[d["unit_type"].isin(unit_type)]
+    if house_type:   d = d[d["house_type"].isin(house_type)]
 
     # Area/locality/street filter — match against city_area OR use geocoded coords
     geo_centers = []  # populated inside street block, needed later for area_center
