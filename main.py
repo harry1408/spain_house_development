@@ -186,7 +186,7 @@ def _parse_amenities(s):
     elif "terraced house" in sl:
         ht = "Terraced house"
     elif "flat" in sl or "apartment" in sl:
-        ht = "Flat"
+        ht = "Apartments"
     else:
         ht = "Not Mentioned"
     return {"bedrooms": int(m_bed.group(1)) if m_bed else (0 if "No bedroom" in s else None),
