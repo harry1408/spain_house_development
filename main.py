@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 import pandas as pd
-import re, math, json, glob, os
+import re, math, json, glob, os, io
 from typing import Optional, List
 
 app = FastAPI(title="Housing Dashboard API")
@@ -1428,8 +1428,11 @@ def search_listings(
                     and _haversine_km(c_lat, c_lng, r["lat"], r["lng"]) <= radius_km]
 
     # Per-unit-type stats from the apartment-level data (accurate counts + prices per type)
+    # Use only listing_ids that survived the radius filter
+    _radius_lids = set(r["listing_id"] for r in rows)
+    _d_for_ut = d[d["listing_id"].isin(_radius_lids)] if _radius_lids else d.iloc[0:0]
     _ut_order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
-    _ut_agg = d.groupby("unit_type").agg(
+    _ut_agg = _d_for_ut.groupby("unit_type").agg(
         count     =("sub_listing_id","nunique"),
         min_price =("price","min"),
         avg_price =("price","mean"),
@@ -1475,3 +1478,220 @@ def search_listings(
     return safe_json({"listings": rows, "total": len(rows),
                       "unit_type_stats": _clean(_ut_agg.to_dict(orient="records")),
                       "area_center": area_center})
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  EXCEL EXPORT  — selected listings in wide per-unit-type format
+# ══════════════════════════════════════════════════════════════════════════
+@app.get("/search/export")
+def export_listings_excel(ids: str = Query(...)):
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        return JSONResponse({"error": "openpyxl not installed"}, status_code=500)
+
+    listing_ids = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    if not listing_ids:
+        return JSONResponse({"error": "No listing IDs"}, status_code=400)
+
+    AME_COLS = [("has_lift","Lift"),("has_parking","Parking"),("has_pool","Pool"),
+                ("has_garden","Garden"),("has_ac","AC"),("has_storage","Storage"),
+                ("has_terrace","Terrace"),("has_wardrobes","Wardrobes")]
+
+    # Collect per-listing data (meta + sorted apartment rows)
+    listings_data = []
+    for lid in listing_ids:
+        d = df[df["listing_id"] == lid]
+        if d.empty: continue
+        latest = d[d["_is_latest"]]
+        if latest.empty: latest = d
+        meta = latest.iloc[0]
+
+        esg = str(meta.get("esg_certificate","")) if pd.notna(meta.get("esg_certificate","")) else ""
+        ht  = ", ".join(sorted(t for t in latest["house_type"].dropna().unique() if t and t != "Not Mentioned")) if "house_type" in latest.columns else ""
+        amenities = [lbl for c_,lbl in AME_COLS if c_ in latest.columns and latest[c_].any()]
+
+        # Sort apartments: by unit_type order then price
+        UT_ORDER = {"Studio":0,"1BR":1,"2BR":2,"3BR":3,"4BR":4,"5BR":5,"Penthouse":6}
+        apt_cols = ["sub_listing_id","unit_type","price","size","price_per_m2",
+                    "floor","floor_num","bedrooms","bathrooms","unit_url"]
+        for ac in ["house_type","has_terrace","has_parking","has_pool","has_garden",
+                   "has_lift","has_ac","has_storage","has_wardrobes"]:
+            if ac in latest.columns: apt_cols.append(ac)
+        apts_df = latest[apt_cols].drop_duplicates("sub_listing_id").copy()
+        apts_df["_s"] = apts_df["unit_type"].map(lambda x: UT_ORDER.get(x, 99))
+        apts_df = apts_df.sort_values(["_s","price"]).drop("_s", axis=1)
+
+        apts = []
+        for _, a in apts_df.iterrows():
+            apt_ame = [lbl for c_,lbl in AME_COLS if c_ in a.index and bool(a.get(c_))]
+            apts.append({
+                "unit_type":  str(a.get("unit_type","")) if pd.notna(a.get("unit_type")) else "",
+                "house_type": str(a.get("house_type","")) if "house_type" in a.index and pd.notna(a.get("house_type")) and a.get("house_type") != "Not Mentioned" else "",
+                "floor":      str(a.get("floor",""))     if pd.notna(a.get("floor"))     else "",
+                "bedrooms":   int(a["bedrooms"])  if pd.notna(a.get("bedrooms"))  else None,
+                "bathrooms":  int(a["bathrooms"]) if pd.notna(a.get("bathrooms")) else None,
+                "size":       round(float(a["size"]),1) if pd.notna(a.get("size")) else None,
+                "price":      int(round(a["price"])) if pd.notna(a.get("price")) else None,
+                "pm2":        int(round(a["price_per_m2"])) if pd.notna(a.get("price_per_m2")) else None,
+                "amenities":  "; ".join(apt_ame),
+                "url":        str(a["unit_url"]) if "unit_url" in a.index and pd.notna(a.get("unit_url")) else "",
+            })
+
+        listings_data.append({
+            "property_name": str(meta.get("property_name","")),
+            "developer":     str(meta.get("developer","")),
+            "city_area":     str(meta.get("city_area","")) if pd.notna(meta.get("city_area")) else "",
+            "municipality":  str(meta.get("municipality","")),
+            "province":      str(meta.get("province","")),
+            "house_type":    ht,
+            "delivery_date": str(meta.get("delivery_date","")).replace("Delivery : ",""),
+            "esg":           esg,
+            "amenities":     "; ".join(amenities),
+            "total_units":   len(apts),
+            "apartments":    apts,
+        })
+
+    # ── Build Excel ────────────────────────────────────────────────────────
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "New Construction Projects"
+
+    from openpyxl.styles import Border, Side
+
+    NAVY  = "0B1239"
+    DGREY = "3A4A6B"
+    LGREY = "F2F4F6"
+    STRIPE= "EBF0F7"
+
+    def fill(hex_): return PatternFill("solid", fgColor=hex_)
+    def font(bold=False, color="000000", size=10, italic=False, underline=None):
+        return Font(bold=bold, color=color, size=size, italic=italic, underline=underline)
+    def aln(h="left", v="center", wrap=False):
+        return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+    thin = Side(style="thin", color="D0D4DE")
+    def border(): return Border(bottom=thin)
+
+    def col(n): return get_column_letter(n)
+    NCOLS = 18  # total columns
+
+    # ── Column definitions ─────────────────────────────────────────────────
+    # Cols: 1-9 = listing info, 10-18 = apartment detail
+    APT_HEADERS = ["Unit Type","House Type","Floor","Beds","Baths","Size (m²)","Price (€)","€/m²","Amenities / Link"]
+
+    # ── Row 1: Title ──────────────────────────────────────────────────────
+    ws.merge_cells(f"A1:{col(NCOLS)}1")
+    c = ws["A1"]
+    c.value = "New Construction Projects"; c.font = font(bold=True, size=14, color=NAVY)
+    c.alignment = aln(); ws.row_dimensions[1].height = 24
+
+    # ── Row 2: Column headers ─────────────────────────────────────────────
+    ws.row_dimensions[2].height = 30
+    listing_headers = ["Property Name","Developer","City Area","Municipality","Province",
+                       "House Type","Delivery","ESG","Total Units"]
+    for i, h in enumerate(listing_headers + APT_HEADERS):
+        c = ws[f"{col(i+1)}2"]
+        c.value = h
+        c.font = font(bold=True, color="FFFFFF", size=9)
+        c.fill = fill(NAVY) if i < 9 else fill(DGREY)
+        c.alignment = aln("center", wrap=True)
+        c.border = border()
+    ws.freeze_panes = "A3"
+
+    # ── Data rows ─────────────────────────────────────────────────────────
+    row = 3
+    for li, ld in enumerate(listings_data):
+        apts  = ld["apartments"]
+        n_apt = len(apts)
+        bg_l  = fill("1A2855")    # listing header dark blue
+        bg_a0 = fill(LGREY)       # apt row even
+        bg_a1 = fill("FFFFFF")    # apt row odd
+
+        # ── Listing header row ────────────────────────────────────────────
+        ws.row_dimensions[row].height = 18
+        listing_vals = [
+            ld["property_name"], ld["developer"], ld["city_area"],
+            ld["municipality"],  ld["province"],  ld["house_type"],
+            ld["delivery_date"], ld["esg"],        f'{n_apt} units',
+        ]
+        for ci, v in enumerate(listing_vals):
+            c = ws[f"{col(ci+1)}{row}"]
+            c.value = v
+            c.font  = font(bold=True, color="FFFFFF", size=10)
+            c.fill  = bg_l
+            c.alignment = aln("left")
+        # Fill apt columns with empty (same dark background for visual band)
+        for ci in range(9, NCOLS):
+            ws[f"{col(ci+1)}{row}"].fill = bg_l
+        # Show listing amenities in col 18
+        c = ws[f"{col(NCOLS)}{row}"]
+        c.value = f'Amenities: {ld["amenities"]}' if ld["amenities"] else ""
+        c.font  = font(bold=False, color="C5CBE9", size=9, italic=True)
+        c.fill  = bg_l
+        row += 1
+
+        # ── Apartment rows ────────────────────────────────────────────────
+        for ai, apt in enumerate(apts):
+            ws.row_dimensions[row].height = 14
+            bg = bg_a0 if ai % 2 == 0 else bg_a1
+
+            # Listing info cols (1-9) — greyed out repeat for context
+            for ci, v in enumerate(listing_vals):
+                c = ws[f"{col(ci+1)}{row}"]
+                c.value = v if ci == 0 else ""   # only repeat property name
+                c.font  = font(color="9AA0B4", size=9)
+                c.fill  = bg
+                c.border = border()
+
+            # Apartment detail cols (10-18)
+            apt_vals = [
+                apt["unit_type"], apt["house_type"], apt["floor"],
+                apt["bedrooms"],  apt["bathrooms"],  apt["size"],
+                apt["price"],     apt["pm2"],         apt["amenities"],
+            ]
+            for ci, v in enumerate(apt_vals):
+                c = ws[f"{col(10+ci)}{row}"]
+                c.fill   = bg
+                c.border = border()
+                is_num   = ci in (3,4,5,6,7)
+                c.alignment = aln("right" if is_num else "left")
+                if ci == 6 and v:
+                    c.value = v; c.number_format = "#,##0"
+                    c.font  = font(bold=True, color=NAVY, size=10)
+                elif ci == 7 and v:
+                    c.value = v; c.number_format = "#,##0"
+                    c.font  = font(color="3A4A6B", size=10)
+                elif ci == 0:  # unit type
+                    c.value = v
+                    c.font  = font(bold=True, color=NAVY, size=10)
+                else:
+                    c.value = v
+                    c.font  = font(color="3A4A6B", size=9)
+
+            # URL in last col
+            c = ws[f"{col(NCOLS)}{row}"]
+            if apt["url"]:
+                c.value = apt["url"]; c.hyperlink = apt["url"]
+                c.font  = Font(color="0563C1", underline="single", size=9)
+            c.fill = bg; c.border = border()
+            row += 1
+
+        # Blank separator row between listings
+        for ci in range(NCOLS):
+            ws[f"{col(ci+1)}{row}"].fill = fill("FFFFFF")
+        row += 1
+
+    # ── Column widths ─────────────────────────────────────────────────────
+    widths = [28, 20, 18, 16, 12, 18, 14, 8, 10,
+              10, 14, 8,  6,  6,  8,  11, 8, 40]
+    for i, w in enumerate(widths):
+        ws.column_dimensions[col(i+1)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=new_construction_projects.xlsx"})
