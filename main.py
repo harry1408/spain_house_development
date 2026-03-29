@@ -459,7 +459,7 @@ def inventory_trend(municipality: Optional[List[str]] = Query(None),
 # ══════════════════════════════════════════════════════════════════════════
 #  DRILL-DOWN — municipality
 # ══════════════════════════════════════════════════════════════════════════
-@app.get("/drilldown/municipality/{municipality}")
+@app.get("/drilldown/municipality/{municipality:path}")
 def drilldown_municipality(municipality: str):
     d = df[df["municipality"] == municipality]
     if d.empty:
