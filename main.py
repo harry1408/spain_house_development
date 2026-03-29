@@ -1035,6 +1035,89 @@ def delisted_apartments(listing_id: int):
     })
 
 # ══════════════════════════════════════════════════════════════════════════
+#  IMAGE CLASSIFICATION — detect floor plans via Pillow image analysis
+# ══════════════════════════════════════════════════════════════════════════
+import json as _json, os as _os
+_IMG_CACHE_FILE = _os.path.join(_os.path.dirname(__file__), "image_cache.json")
+_IMG_CACHE: dict = {}
+
+# Load persisted cache on startup
+try:
+    with open(_IMG_CACHE_FILE, "r") as _f:
+        _IMG_CACHE = _json.load(_f)
+except Exception:
+    _IMG_CACHE = {}
+
+def _save_img_cache():
+    try:
+        with open(_IMG_CACHE_FILE, "w") as _f:
+            _json.dump(_IMG_CACHE, _f)
+    except Exception:
+        pass
+
+def _is_floorplan(url: str) -> bool:
+    """
+    Classify an image as a floor plan using Pillow pixel analysis.
+    Floor plans are nearly monochrome documents: very high white ratio + very low colour saturation.
+    Thresholds calibrated on real Idealista data:
+      - property photos:  white_ratio 0.0–0.31, saturation 35–79
+      - floor plans:      white_ratio 0.7–0.85, saturation 2–8
+    Results are cached to disk so each URL is only downloaded once.
+    """
+    if url in _IMG_CACHE:
+        return _IMG_CACHE[url]
+
+    result = False
+    try:
+        import requests as _req
+        from PIL import Image as _PILImg
+        import numpy as _np
+        import io as _io
+
+        resp = _req.get(url, timeout=6, headers={"User-Agent": "Mozilla/5.0"})
+        img = _PILImg.open(_io.BytesIO(resp.content)).convert("RGB")
+
+        # Downscale for speed (200×200 is plenty for colour stats)
+        img.thumbnail((200, 200))
+        arr = _np.array(img, dtype=float)
+
+        # White pixel ratio: all channels > 210
+        white_ratio = (_np.all(arr > 210, axis=2)).mean()
+
+        # Colour saturation proxy: mean channel range per pixel
+        ch_max = arr.max(axis=2)
+        ch_min = arr.min(axis=2)
+        avg_sat = (ch_max - ch_min).mean()
+
+        # Floor plan: mostly white AND nearly monochrome
+        result = bool(white_ratio > 0.50 and avg_sat < 20)
+
+    except Exception:
+        result = False
+
+    _IMG_CACHE[url] = result
+    # Persist every 20 new entries
+    if len(_IMG_CACHE) % 20 == 0:
+        _save_img_cache()
+    return result
+
+def _classify_images_parallel(urls: list) -> dict:
+    """Download + classify a list of URLs concurrently. Returns {url: is_floorplan}."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    results = {}
+    uncached = [u for u in urls if u not in _IMG_CACHE]
+    if uncached:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            fut = {pool.submit(_is_floorplan, u): u for u in uncached}
+            for f in as_completed(fut):
+                u = fut[f]
+                results[u] = f.result()
+        _save_img_cache()
+    for u in urls:
+        results[u] = _IMG_CACHE.get(u, results.get(u, False))
+    return results
+
+# ══════════════════════════════════════════════════════════════════════════
 #  LISTING PHOTOS — read from images column in data
 # ══════════════════════════════════════════════════════════════════════════
 @app.get("/listing/photos/{listing_id}")
@@ -1051,14 +1134,12 @@ def listing_photos(listing_id: int):
         s = str(raw).strip()
         if not s or s == "0":
             continue
-        # Try parsing as Python list literal e.g. "['url1', 'url2']"
         urls = []
         try:
             parsed = _ast.literal_eval(s)
             if isinstance(parsed, list):
                 urls = [str(u).strip() for u in parsed]
         except Exception:
-            # Fallback: strip brackets and split on comma
             urls = [u.strip().strip("'").strip('"') for u in s.strip("[]").split(",")]
 
         for url in urls:
@@ -1071,8 +1152,17 @@ def listing_photos(listing_id: int):
             seen.add(key)
             all_urls.append(url)
 
-    photos      = [u for u in all_urls if not _FLOORPLAN_RE.search(u)]
-    floor_plans = [u for u in all_urls if     _FLOORPLAN_RE.search(u)]
+    # Step 1: URL-keyword split (fast, no download needed)
+    fp_by_url  = [u for u in all_urls if     _FLOORPLAN_RE.search(u)]
+    ph_by_url  = [u for u in all_urls if not _FLOORPLAN_RE.search(u)]
+
+    # Step 2: For the remaining "photos", run pixel analysis to catch
+    #         floor-plan images whose URLs have no keywords
+    classifications = _classify_images_parallel(ph_by_url)
+    photos      = [u for u in ph_by_url if not classifications.get(u, False)]
+    fp_by_pixel = [u for u in ph_by_url if     classifications.get(u, False)]
+
+    floor_plans = fp_by_url + fp_by_pixel
     return safe_json({"photos": photos, "floor_plans": floor_plans})
 
 # ── Search page endpoints ─────────────────────────────────────────────────
