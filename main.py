@@ -1695,3 +1695,27 @@ def export_listings_excel(ids: str = Query(...)):
     return StreamingResponse(buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=new_construction_projects.xlsx"})
+
+
+@app.get("/export/by-filter")
+def export_by_filter(
+    provinces:     Optional[List[str]] = Query(None),
+    municipalities: Optional[List[str]] = Query(None),
+):
+    """Export all listings matching given provinces and/or municipalities."""
+    d = df[df["_is_latest"]]
+    if provinces:
+        d = d[d["province"].isin(provinces)]
+    if municipalities:
+        d = d[d["municipality"].isin(municipalities)]
+
+    listing_ids = sorted(d["listing_id"].dropna().unique().astype(int).tolist())
+    if not listing_ids:
+        return JSONResponse({"error": "No listings found"}, status_code=404)
+
+    ids_str = ",".join(str(i) for i in listing_ids)
+    # Reuse the existing export function
+    from fastapi import Request
+    class _FakeQuery:
+        pass
+    return export_listings_excel(ids=ids_str)
