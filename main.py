@@ -116,6 +116,31 @@ def _latest_df(df_src=None):
     d = df_src if df_src is not None else df
     return d[d["_is_latest"]]
 
+_UNIT_COUNT_PATTERNS = [
+    re.compile(r'development of\s+(\d+)\s+(?:homes?|apartments?|properties|residences?|units?|dwellings?|viviendas?)', re.I),
+    re.compile(r'consisting of\s+(\d+)\s+(?:homes?|apartments?|properties|residences?|units?|dwellings?)', re.I),
+    re.compile(r'composed of\s+(\d+)\s+(?:homes?|apartments?|properties|residences?|units?|dwellings?)', re.I),
+    re.compile(r'made up of\s+(\d+)\s+(?:homes?|apartments?|properties|residences?|units?|dwellings?)', re.I),
+    re.compile(r'consists of\s+(\d+)\s+(?:homes?|apartments?|properties|residences?|units?|dwellings?)', re.I),
+    re.compile(r'has\s+(\d+)\s+(?:homes?|apartments?|residences?|bright homes?|multi-family)', re.I),
+    re.compile(r'(\d+)\s+(?:multi-family homes?|single-family homes?|townhouses?)', re.I),
+    re.compile(r'(\d+)\s+(?:homes?|apartments?)\s+(?:with|and|in|distributed|for)\b', re.I),
+    re.compile(r'(?:^|[\s,])(\d+)\s+homes?(?=[\s,\.]|$)', re.I),
+    re.compile(r'(?:^|[\s,])(\d+)\s+apartments?(?=[\s,\.]|$)', re.I),
+    re.compile(r'(\d+)\s+(?:viviendas?|pisos?|apartamentos?)\s', re.I),
+]
+
+def _extract_stated_units(description: str):
+    if not description or not isinstance(description, str):
+        return None
+    for pat in _UNIT_COUNT_PATTERNS:
+        m = pat.search(description)
+        if m:
+            n = int(m.group(1))
+            if 2 <= n <= 2000:
+                return n
+    return None
+
 def _year(s):
     if pd.isna(s): return None
     m = re.search(r"(\d{4})", str(s))
@@ -597,6 +622,7 @@ def drilldown_listing(listing_id: int):
         "delivery_date": str(meta["delivery_date"]),
         "esg_grade":     str(meta["esg_grade"]) if pd.notna(meta["esg_grade"]) else None,
         "description":   next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None),
+        "stated_total_units": _extract_stated_units(next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None)),
         "total_units":   int(len(dl)),
         "periods":       PERIODS_SORTED,
         "apartments":    apt_records,
