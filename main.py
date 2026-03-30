@@ -188,7 +188,7 @@ def _parse_amenities(s):
     elif "flat" in sl or "apartment" in sl:
         ht = "Apartments"
     else:
-        ht = "Not Mentioned"
+        ht = "Apartments"
     return {"bedrooms": int(m_bed.group(1)) if m_bed else (0 if "No bedroom" in s else None),
             "bathrooms": int(m_bath.group(1)) if m_bath else None,
             "floor_area_m2": int(m_fa.group(1)) if m_fa else None,
@@ -473,7 +473,7 @@ def drilldown_municipality(municipality: str):
         avg_price    =("price","mean"), avg_price_m2=("price_per_m2","mean"),
         avg_size     =("size","mean"),
         unit_types   =("unit_type",  lambda x: ", ".join(sorted(x.dropna().unique().tolist()))),
-        house_types  =("house_type", lambda x: ", ".join(sorted(t for t in x.dropna().unique() if t and t != "Not Mentioned"))),
+        house_types  =("house_type", lambda x: ", ".join(sorted(t for t in x.dropna().unique() if t))),
         has_pool=("has_pool","max"), has_parking=("has_parking","max"),
         has_terrace=("has_terrace","max"), has_lift=("has_lift","max"),
     ).reset_index()
@@ -998,7 +998,7 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
         avg_price_m2 =("price_per_m2","mean"),
         avg_size     =("size","mean"),
         unit_types   =("unit_type",  lambda x: ", ".join(sorted(x.dropna().unique().tolist()))),
-        house_types  =("house_type", lambda x: ", ".join(sorted(t for t in x.dropna().unique() if t and t != "Not Mentioned"))),
+        house_types  =("house_type", lambda x: ", ".join(sorted(t for t in x.dropna().unique() if t))),
         has_pool     =("has_pool","max"),
         has_parking  =("has_parking","max"),
         has_terrace  =("has_terrace","max"),
@@ -1390,7 +1390,7 @@ def search_listings(
         min_price      =("price","min"),
         max_price      =("price","max"),
         unit_types     =("unit_type",  lambda x: ", ".join(sorted(x.dropna().unique()))),
-        house_types    =("house_type", lambda x: ", ".join(sorted(t for t in x.dropna().unique() if t and t != "Not Mentioned"))),
+        house_types    =("house_type", lambda x: ", ".join(sorted(t for t in x.dropna().unique() if t))),
         city_area      =("city_area","first"),
     )
     if "esg_certificate" in d.columns:
@@ -1510,7 +1510,7 @@ def export_listings_excel(ids: str = Query(...)):
         meta = latest.iloc[0]
 
         esg = str(meta.get("esg_certificate","")) if pd.notna(meta.get("esg_certificate","")) else ""
-        ht  = ", ".join(sorted(t for t in latest["house_type"].dropna().unique() if t and t != "Not Mentioned")) if "house_type" in latest.columns else ""
+        ht  = ", ".join(sorted(t for t in latest["house_type"].dropna().unique() if t)) if "house_type" in latest.columns else ""
         amenities = [lbl for c_,lbl in AME_COLS if c_ in latest.columns and latest[c_].any()]
 
         # Sort apartments: by unit_type order then price
@@ -1529,7 +1529,7 @@ def export_listings_excel(ids: str = Query(...)):
             apt_ame = [lbl for c_,lbl in AME_COLS if c_ in a.index and bool(a.get(c_))]
             apts.append({
                 "unit_type":  str(a.get("unit_type","")) if pd.notna(a.get("unit_type")) else "",
-                "house_type": str(a.get("house_type","")) if "house_type" in a.index and pd.notna(a.get("house_type")) and a.get("house_type") != "Not Mentioned" else "",
+                "house_type": str(a.get("house_type","")) if "house_type" in a.index and pd.notna(a.get("house_type")) else "",
                 "floor":      str(a.get("floor",""))     if pd.notna(a.get("floor"))     else "",
                 "bedrooms":   int(a["bedrooms"])  if pd.notna(a.get("bedrooms"))  else None,
                 "bathrooms":  int(a["bathrooms"]) if pd.notna(a.get("bathrooms")) else None,
