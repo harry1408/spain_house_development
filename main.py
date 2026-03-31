@@ -1118,8 +1118,9 @@ def _is_floorplan(url: str) -> bool:
         ch_min = arr.min(axis=2)
         avg_sat = (ch_max - ch_min).mean()
 
-        # Floor plan: mostly white AND nearly monochrome
-        result = bool(white_ratio > 0.50 and avg_sat < 20)
+        # Floor plan: mostly white/light AND low saturation
+        # Threshold loosened to catch coloured-room floor plans (light blue/green fills)
+        result = bool(white_ratio > 0.45 and avg_sat < 35)
 
     except Exception:
         result = False
@@ -1446,6 +1447,20 @@ def search_listings(
     _ut_agg["_s"] = _ut_agg["unit_type"].apply(lambda x: _ut_order.index(x) if x in _ut_order else 99)
     _ut_agg = _ut_agg.sort_values("_s").drop("_s", axis=1)
 
+    # Per-house-type stats (unit level)
+    _ht_agg = _d_for_ut[_d_for_ut["house_type"].notna() & (_d_for_ut["house_type"] != "")].groupby("house_type").agg(
+        count     =("sub_listing_id","nunique"),
+        min_price =("price","min"),
+        avg_price =("price","mean"),
+        max_price =("price","max"),
+        avg_size  =("size","mean"),
+        avg_pm2   =("price_per_m2","mean"),
+    ).reset_index()
+    for _c in ["min_price","avg_price","max_price"]: _ht_agg[_c] = _ht_agg[_c].round(0)
+    _ht_agg["avg_size"] = _ht_agg["avg_size"].round(1)
+    _ht_agg["avg_pm2"]  = _ht_agg["avg_pm2"].round(0)
+    _ht_agg = _ht_agg.sort_values("count", ascending=False)
+
     # Determine area center for the frontend map
     area_center = None
     if street and geo_centers:
@@ -1477,6 +1492,7 @@ def search_listings(
 
     return safe_json({"listings": rows, "total": len(rows),
                       "unit_type_stats": _clean(_ut_agg.to_dict(orient="records")),
+                      "house_type_stats": _clean(_ht_agg.to_dict(orient="records")),
                       "area_center": area_center})
 
 
@@ -1540,6 +1556,15 @@ def export_listings_excel(ids: str = Query(...)):
                 "url":        str(a["unit_url"]) if "unit_url" in a.index and pd.notna(a.get("unit_url")) else "",
             })
 
+        desc_raw = next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"]
+                         if c in d.columns and pd.notna(meta.get(c))), "")
+        _strip_lines = [
+            "This comment was automatically translated and may not be 100% accurate.",
+            "See description in the original language",
+        ]
+        for _sl in _strip_lines:
+            desc_raw = desc_raw.replace(_sl, "")
+        desc_raw = desc_raw.strip()
         listings_data.append({
             "property_name": str(meta.get("property_name","")),
             "developer":     str(meta.get("developer","")),
@@ -1550,6 +1575,7 @@ def export_listings_excel(ids: str = Query(...)):
             "delivery_date": str(meta.get("delivery_date","")).replace("Delivery : ",""),
             "esg":           esg,
             "amenities":     "; ".join(amenities),
+            "description":   desc_raw,
             "total_units":   len(apts),
             "apartments":    apts,
         })
@@ -1566,9 +1592,10 @@ def export_listings_excel(ids: str = Query(...)):
     LGREY = "F2F4F6"
     STRIPE= "EBF0F7"
 
+    FONT_NAME = "Aptos Narrow"
     def fill(hex_): return PatternFill("solid", fgColor=hex_)
     def font(bold=False, color="000000", size=10, italic=False, underline=None):
-        return Font(bold=bold, color=color, size=size, italic=italic, underline=underline)
+        return Font(name=FONT_NAME, bold=bold, color=color, size=size, italic=italic, underline=underline)
     def aln(h="left", v="center", wrap=False):
         return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
     thin = Side(style="thin", color="D0D4DE")
@@ -1581,27 +1608,40 @@ def export_listings_excel(ids: str = Query(...)):
     # Cols: 1-9 = listing info, 10-18 = apartment detail
     APT_HEADERS = ["Unit Type","House Type","Floor","Beds","Baths","Size (m²)","Price (€)","€/m²","Amenities / Link"]
 
+    import datetime as _dt
+    export_date = _dt.datetime.now().strftime("%d %B %Y")
+
     # ── Row 1: Title ──────────────────────────────────────────────────────
     ws.merge_cells(f"A1:{col(NCOLS)}1")
     c = ws["A1"]
-    c.value = "New Construction Projects"; c.font = font(bold=True, size=14, color=NAVY)
-    c.alignment = aln(); ws.row_dimensions[1].height = 24
+    c.value = "New Construction Projects - Spain Housing Intelligence"
+    c.font = Font(name=FONT_NAME, bold=True, size=15, color=NAVY)
+    c.alignment = aln(); ws.row_dimensions[1].height = 28
 
-    # ── Row 2: Column headers ─────────────────────────────────────────────
-    ws.row_dimensions[2].height = 30
+    # ── Row 2: Description ────────────────────────────────────────────────
+    ws.merge_cells(f"A2:{col(NCOLS)}2")
+    c = ws["A2"]
+    c.value = f"Residential new-build developments | Unit-level pricing & specifications | Exported {export_date}"
+    c.font = Font(name=FONT_NAME, size=10, italic=True, color="3A4A6B")
+    c.fill = fill("EEF1F8")
+    c.alignment = aln()
+    ws.row_dimensions[2].height = 18
+
+    # ── Row 3: Column headers ─────────────────────────────────────────────
+    ws.row_dimensions[3].height = 30
     listing_headers = ["Property Name","Developer","City Area","Municipality","Province",
                        "House Type","Delivery","ESG","Total Units"]
     for i, h in enumerate(listing_headers + APT_HEADERS):
-        c = ws[f"{col(i+1)}2"]
+        c = ws[f"{col(i+1)}3"]
         c.value = h
         c.font = font(bold=True, color="FFFFFF", size=9)
         c.fill = fill(NAVY) if i < 9 else fill(DGREY)
         c.alignment = aln("center", wrap=True)
         c.border = border()
-    ws.freeze_panes = "A3"
+    ws.freeze_panes = "A4"
 
     # ── Data rows ─────────────────────────────────────────────────────────
-    row = 3
+    row = 4
     for li, ld in enumerate(listings_data):
         apts  = ld["apartments"]
         n_apt = len(apts)
@@ -1631,6 +1671,17 @@ def export_listings_excel(ids: str = Query(...)):
         c.font  = font(bold=False, color="C5CBE9", size=9, italic=True)
         c.fill  = bg_l
         row += 1
+
+        # ── Description row (if available) ────────────────────────────────
+        if ld.get("description"):
+            ws.merge_cells(f"A{row}:{col(NCOLS)}{row}")
+            c = ws[f"A{row}"]
+            c.value = ld["description"]
+            c.font  = Font(name=FONT_NAME, size=9, italic=True, color="3A4A6B")
+            c.fill  = fill("F4F6FB")
+            c.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+            ws.row_dimensions[row].height = 42
+            row += 1
 
         # ── Apartment rows ────────────────────────────────────────────────
         for ai, apt in enumerate(apts):
@@ -1674,7 +1725,7 @@ def export_listings_excel(ids: str = Query(...)):
             c = ws[f"{col(NCOLS)}{row}"]
             if apt["url"]:
                 c.value = apt["url"]; c.hyperlink = apt["url"]
-                c.font  = Font(color="0563C1", underline="single", size=9)
+                c.font  = Font(name=FONT_NAME, color="0563C1", underline="single", size=9)
             c.fill = bg; c.border = border()
             row += 1
 
