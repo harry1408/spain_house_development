@@ -1244,6 +1244,59 @@ def listing_photos(listing_id: int):
     floor_plans = [u for u, is_fp in url_classification.items() if is_fp]
     return safe_json({"photos": photos, "floor_plans": floor_plans})
 
+
+@app.get("/listing/photos/{listing_id}/{sub_listing_id}")
+def listing_photos_for_apt(listing_id: int, sub_listing_id: int):
+    """Return floor plans specific to one sub_listing (apartment unit).
+    Uses images_dic titles if available for that row; falls back to full
+    listing floor plans if no sub_listing-specific data exists."""
+    import re as _re, ast as _ast
+
+    rows = df[df["listing_id"] == listing_id]
+    if rows.empty:
+        return safe_json({"photos": [], "floor_plans": [], "apt_specific": False})
+
+    _FLOORPLAN_TITLE = _re.compile(r'floor.?plan|plano|planta|blueprint', _re.IGNORECASE)
+
+    # Check if this sub_listing has its own images_dic entry
+    if "images_dic" in rows.columns:
+        apt_rows = rows[rows["sub_listing_id"] == sub_listing_id]
+        apt_images_dic = apt_rows["images_dic"].dropna()
+        if not apt_images_dic.empty:
+            for raw in apt_images_dic:
+                s = str(raw).strip()
+                if not s or s in ("0", "nan", "[]"):
+                    continue
+                try:
+                    parsed = _ast.literal_eval(s)
+                except Exception:
+                    continue
+                if not isinstance(parsed, list) or not parsed:
+                    continue
+                # Has real data — extract floor plans from this apt's images_dic
+                apt_floor_plans = []
+                apt_photos = []
+                for item in parsed:
+                    if not isinstance(item, dict):
+                        continue
+                    url   = str(item.get("url", "")).strip()
+                    title = str(item.get("title", "")).strip()
+                    if not url.startswith("http"):
+                        continue
+                    if title and _FLOORPLAN_TITLE.search(title):
+                        apt_floor_plans.append(url)
+                    elif title:
+                        apt_photos.append(url)
+                    # no title — skip (don't pixel-classify per-apt images, too slow)
+                if apt_floor_plans or apt_photos:
+                    return safe_json({"photos": apt_photos, "floor_plans": apt_floor_plans, "apt_specific": True})
+
+    # No sub_listing-specific data — fall back to full listing floor plans
+    import json as _json
+    full_resp = listing_photos(listing_id)
+    full_data = _json.loads(full_resp.body)
+    return safe_json({**full_data, "apt_specific": False})
+
 # ── Search page endpoints ─────────────────────────────────────────────────
 
 @app.get("/search/options")
