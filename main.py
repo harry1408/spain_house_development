@@ -467,6 +467,15 @@ def drilldown_municipality(municipality: str):
 
     # latest period snapshot for listings (use per-province latest)
     dl = d[d["_is_latest"]]
+    # Detect "Tourist apartment" in any description column
+    _desc_col = next((c for c in ["description","property_description","descripcion","desc","comments"] if c in dl.columns), None)
+    if _desc_col:
+        dl = dl.copy()
+        dl["_is_tourist"] = dl[_desc_col].fillna("").str.contains("tourist apartment", case=False, na=False)
+    else:
+        dl = dl.copy()
+        dl["_is_tourist"] = False
+
     listings_grp = dl.groupby(["listing_id","property_name","developer","delivery_date","esg_grade"], dropna=False).agg(
         units        =("sub_listing_id","nunique"),
         min_price    =("price","min"), max_price=("price","max"),
@@ -476,6 +485,7 @@ def drilldown_municipality(municipality: str):
         house_types  =("house_type", lambda x: ", ".join(sorted(t for t in x.dropna().unique() if t))),
         has_pool=("has_pool","max"), has_parking=("has_parking","max"),
         has_terrace=("has_terrace","max"), has_lift=("has_lift","max"),
+        is_tourist   =("_is_tourist","max"),
     ).reset_index()
     for c in ["avg_price","min_price","max_price"]:
         listings_grp[c] = listings_grp[c].round(0)
@@ -625,6 +635,7 @@ def drilldown_listing(listing_id: int):
         "delivery_date": str(meta["delivery_date"]),
         "esg_grade":     str(meta["esg_grade"]) if pd.notna(meta["esg_grade"]) else None,
         "description":   next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None),
+        "is_tourist":    any(bool(str(meta.get(c,"")).lower().find("tourist apartment") >= 0) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))),
         "stated_total_units": _extract_stated_units(next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None)),
         "total_units":   int(len(dl)),
         "periods":       PERIODS_SORTED,
