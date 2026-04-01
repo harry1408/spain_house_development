@@ -1,0 +1,4726 @@
+{
+  "194584": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de la Goleta"
+  },
+  "34672096": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja dels Arenals del Sol"
+  },
+  "37802937": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "el Torres"
+  },
+  "40487112": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de Xeraco"
+  },
+  "85197671": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Cala Cortina"
+  },
+  "86953052": {
+    "nearest_beach_km": 6.4,
+    "nearest_beach_name": "Platja de la Patacona"
+  },
+  "87411631": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Playa del Hornillo"
+  },
+  "89913553": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "91710415": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Cala Blanca"
+  },
+  "92112728": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de l'Albir"
+  },
+  "92523602": {
+    "nearest_beach_km": 8.4,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "93084619": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "93499000": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "93955651": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "Platja del Mal Pas"
+  },
+  "93972012": {
+    "nearest_beach_km": 8.8,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "94253868": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Beach"
+  },
+  "94660160": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja de La Roqueta"
+  },
+  "94772040": {
+    "nearest_beach_km": 5.3,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "94964676": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja del Perell\u00f3"
+  },
+  "94991816": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "\"Can\" Punta del Riu Sec"
+  },
+  "95274276": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja Nord de Pen\u00edscola"
+  },
+  "95483402": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Beach"
+  },
+  "95655744": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Playa de Los N\u00e1ufragos"
+  },
+  "95776458": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "95813136": {
+    "nearest_beach_km": 8.5,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "96417684": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "Beach"
+  },
+  "96707109": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "96771795": {
+    "nearest_beach_km": 3.5,
+    "nearest_beach_name": "Platja de l'Albufereta"
+  },
+  "96936941": {
+    "nearest_beach_km": 12.6,
+    "nearest_beach_name": "Beach"
+  },
+  "97022655": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Playa de Aguamarina"
+  },
+  "97022709": {
+    "nearest_beach_km": 3.4,
+    "nearest_beach_name": "Cala de lo Ferri"
+  },
+  "97023245": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Playa Honda"
+  },
+  "97124347": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "97178636": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "97217292": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala del Morell\u00f3"
+  },
+  "97233332": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Cala en Cal\u00f3"
+  },
+  "97338009": {
+    "nearest_beach_km": 8.0,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "97474957": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "97701601": {
+    "nearest_beach_km": 1.7,
+    "nearest_beach_name": "Beach"
+  },
+  "97711049": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja del Cantal Roig"
+  },
+  "97748250": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de Sant Gabriel"
+  },
+  "98206946": {
+    "nearest_beach_km": 7.0,
+    "nearest_beach_name": "Beach"
+  },
+  "98334020": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Platja Punta del Raset"
+  },
+  "98658618": {
+    "nearest_beach_km": 5.3,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "98972834": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "98983274": {
+    "nearest_beach_km": 7.7,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "99094016": {
+    "nearest_beach_km": 8.6,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "99121611": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja del Cantal Roig"
+  },
+  "99422972": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de Fora del Forat"
+  },
+  "99438057": {
+    "nearest_beach_km": 6.6,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "99556909": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Platja Babil\u00f2nia"
+  },
+  "99590616": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Beach"
+  },
+  "99622987": {
+    "nearest_beach_km": 4.2,
+    "nearest_beach_name": "Platja de la Patacona"
+  },
+  "99710236": {
+    "nearest_beach_km": 10.8,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "99759067": {
+    "nearest_beach_km": 10.7,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "99798971": {
+    "nearest_beach_km": 9.3,
+    "nearest_beach_name": "Beach"
+  },
+  "99799092": {
+    "nearest_beach_km": 9.3,
+    "nearest_beach_name": "Beach"
+  },
+  "99812163": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "100087434": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "Beach"
+  },
+  "100162143": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "100366032": {
+    "nearest_beach_km": 9.9,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "100594324": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "100641037": {
+    "nearest_beach_km": 8.3,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "100669055": {
+    "nearest_beach_km": 2.2,
+    "nearest_beach_name": "Beach"
+  },
+  "100868780": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "100912655": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Playa Las Charcas"
+  },
+  "101012526": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de Ponent"
+  },
+  "101024148": {
+    "nearest_beach_km": 7.5,
+    "nearest_beach_name": "Beach"
+  },
+  "101025226": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Playa de Poniente"
+  },
+  "101033794": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja de Canet"
+  },
+  "101139629": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "101259199": {
+    "nearest_beach_km": 8.3,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "101298595": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja del Serradal"
+  },
+  "101301340": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "101318648": {
+    "nearest_beach_km": 3.8,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "101342860": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "101428037": {
+    "nearest_beach_km": 18.8,
+    "nearest_beach_name": "Playa de Piedra Mala"
+  },
+  "101451357": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "101464660": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja del Cantal Roig"
+  },
+  "101467446": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Les Deveses"
+  },
+  "101467636": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "101474114": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja de Ponent"
+  },
+  "101479070": {
+    "nearest_beach_km": 18.6,
+    "nearest_beach_name": "Beach"
+  },
+  "101507695": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "101517990": {
+    "nearest_beach_km": 6.5,
+    "nearest_beach_name": "Platja de la Patacona"
+  },
+  "101571633": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de la Barreta de Gualda"
+  },
+  "101719077": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Las Ca\u00f1as"
+  },
+  "101742046": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Les Bovetes"
+  },
+  "101963024": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Platja de Sant Joan"
+  },
+  "102069452": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "102083389": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "102112769": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "102184780": {
+    "nearest_beach_km": 15.2,
+    "nearest_beach_name": "Cala El Palmeral"
+  },
+  "102340129": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "102385394": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "102623713": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "102817138": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "102835996": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Platja de Ponent"
+  },
+  "102877205": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "102879649": {
+    "nearest_beach_km": 4.0,
+    "nearest_beach_name": "Platja de Vistabella"
+  },
+  "102905394": {
+    "nearest_beach_km": 5.4,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "102966777": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "102993490": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "103028513": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "103106092": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "103137992": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de Terranova"
+  },
+  "103282917": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Playa del Cura"
+  },
+  "103306476": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "103323986": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Les Deveses"
+  },
+  "103323987": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de Terranova"
+  },
+  "103335430": {
+    "nearest_beach_km": 11.2,
+    "nearest_beach_name": "Platja de la Gola"
+  },
+  "103363530": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de la Barreta de Gualda"
+  },
+  "103420530": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Platja de Ven\u00e8cia"
+  },
+  "103437783": {
+    "nearest_beach_km": 7.0,
+    "nearest_beach_name": "Beach"
+  },
+  "103447190": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "103542520": {
+    "nearest_beach_km": 10.8,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "103625944": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "el Torres"
+  },
+  "103626201": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "103683844": {
+    "nearest_beach_km": 6.4,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "103830877": {
+    "nearest_beach_km": 8.6,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "103833133": {
+    "nearest_beach_km": 2.2,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "103842036": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de la Fossa"
+  },
+  "103859113": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "103868761": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja Sud de Pen\u00edscola"
+  },
+  "103894332": {
+    "nearest_beach_km": 9.5,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "103894333": {
+    "nearest_beach_km": 6.7,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "103919549": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja de la Patacona"
+  },
+  "103923464": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "La zorra"
+  },
+  "103949553": {
+    "nearest_beach_km": 8.3,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "103978111": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "104049613": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "104067851": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja del Cantal Roig"
+  },
+  "104068681": {
+    "nearest_beach_km": 12.9,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "104080408": {
+    "nearest_beach_km": 3.5,
+    "nearest_beach_name": "Platja Punta del Raset"
+  },
+  "104080409": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "104278312": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "104285200": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Cala en Cal\u00f3"
+  },
+  "104297637": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Cala del Franc\u00e9s"
+  },
+  "104297638": {
+    "nearest_beach_km": 3.1,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "104326607": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "104373494": {
+    "nearest_beach_km": 5.9,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "104374891": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "104387222": {
+    "nearest_beach_km": 6.7,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "104398001": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "la Caleta"
+  },
+  "104411496": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Platja dels Marenys de Rafalca\u00efd"
+  },
+  "104426102": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "104448421": {
+    "nearest_beach_km": 4.7,
+    "nearest_beach_name": "Beach"
+  },
+  "104553290": {
+    "nearest_beach_km": 7.4,
+    "nearest_beach_name": "Beach"
+  },
+  "104566656": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "104577331": {
+    "nearest_beach_km": 7.7,
+    "nearest_beach_name": "Beach"
+  },
+  "104593433": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de Plans"
+  },
+  "104647399": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Beach"
+  },
+  "104648736": {
+    "nearest_beach_km": 7.4,
+    "nearest_beach_name": "Beach"
+  },
+  "104649012": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja Torre de Sant Vicent"
+  },
+  "104668726": {
+    "nearest_beach_km": 6.3,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "104687176": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "el Torres"
+  },
+  "104692916": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Playa de La Mata"
+  },
+  "104700373": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Platja de Sant Joan"
+  },
+  "104708403": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja Belcaire"
+  },
+  "104710394": {
+    "nearest_beach_km": 8.6,
+    "nearest_beach_name": "Beach"
+  },
+  "104736634": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "104800950": {
+    "nearest_beach_km": 9.5,
+    "nearest_beach_name": "Beach"
+  },
+  "104804197": {
+    "nearest_beach_km": 3.8,
+    "nearest_beach_name": "Beach"
+  },
+  "104814280": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Playa de Cabo Cervera"
+  },
+  "104831226": {
+    "nearest_beach_km": 3.5,
+    "nearest_beach_name": "Cala Cortina"
+  },
+  "104844633": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de la Vila Joiosa"
+  },
+  "104875397": {
+    "nearest_beach_km": 8.2,
+    "nearest_beach_name": "Platja Naturista de Moncofa"
+  },
+  "104894373": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja del Triador"
+  },
+  "104911208": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "104939097": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "104943179": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "el Torres"
+  },
+  "104974079": {
+    "nearest_beach_km": 18.1,
+    "nearest_beach_name": "Playa artificial de Coy"
+  },
+  "104976231": {
+    "nearest_beach_km": 8.2,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "104986027": {
+    "nearest_beach_km": 9.1,
+    "nearest_beach_name": "Beach"
+  },
+  "105003162": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "105033213": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "105034988": {
+    "nearest_beach_km": 9.2,
+    "nearest_beach_name": "Platja de la Patacona"
+  },
+  "105045035": {
+    "nearest_beach_km": 9.6,
+    "nearest_beach_name": "Beach"
+  },
+  "105117686": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja dels Tossals"
+  },
+  "105117868": {
+    "nearest_beach_km": 10.6,
+    "nearest_beach_name": "Platja dels Tossals"
+  },
+  "105154197": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de la Vila Joiosa"
+  },
+  "105176385": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "105177363": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "105186737": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja de Llevant"
+  },
+  "105249434": {
+    "nearest_beach_km": 9.3,
+    "nearest_beach_name": "Beach"
+  },
+  "105257026": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de Plans"
+  },
+  "105263517": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "el Torres"
+  },
+  "105267348": {
+    "nearest_beach_km": 7.1,
+    "nearest_beach_name": "Beach"
+  },
+  "105332781": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "105338279": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja de Nules"
+  },
+  "105353488": {
+    "nearest_beach_km": 6.6,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "105356274": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "105369533": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja del Parad\u00eds"
+  },
+  "105405060": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Beach"
+  },
+  "105423487": {
+    "nearest_beach_km": 18.2,
+    "nearest_beach_name": "Beach"
+  },
+  "105435298": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "105443478": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja del Bol"
+  },
+  "105467766": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja Punta del Raset"
+  },
+  "105473356": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de les Salines"
+  },
+  "105500976": {
+    "nearest_beach_km": 4.7,
+    "nearest_beach_name": "el Torres"
+  },
+  "105504178": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "105514191": {
+    "nearest_beach_km": 14.8,
+    "nearest_beach_name": "Cala El Palmeral"
+  },
+  "105534575": {
+    "nearest_beach_km": 6.4,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "105548955": {
+    "nearest_beach_km": 4.7,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "105567798": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de Terranova"
+  },
+  "105574938": {
+    "nearest_beach_km": 9.3,
+    "nearest_beach_name": "Beach"
+  },
+  "105585433": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "105622250": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Cala del Portitxol"
+  },
+  "105622881": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja del Portet"
+  },
+  "105636198": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja Punta del Raset"
+  },
+  "105695673": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Platja de les Fonts"
+  },
+  "105695674": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja del Carregador"
+  },
+  "105701538": {
+    "nearest_beach_km": 6.6,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "105708888": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja del Clot"
+  },
+  "105775725": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja del Morrongo"
+  },
+  "105795965": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja del Morrongo"
+  },
+  "105798722": {
+    "nearest_beach_km": 8.2,
+    "nearest_beach_name": "Platja Naturista de Moncofa"
+  },
+  "105849887": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Playa del Acequi\u00f3n"
+  },
+  "105850664": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "105867325": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "105867366": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "105868692": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Cala dels Cossis"
+  },
+  "105869795": {
+    "nearest_beach_km": 7.3,
+    "nearest_beach_name": "Beach"
+  },
+  "105934534": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "105951296": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "105964481": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "105964483": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Platja de les Marines"
+  },
+  "106034639": {
+    "nearest_beach_km": 12.9,
+    "nearest_beach_name": "Beach"
+  },
+  "106034704": {
+    "nearest_beach_km": 9.8,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "106051963": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "106052794": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Negra"
+  },
+  "106057306": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "106083465": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106085798": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Platja de Sant Gabriel"
+  },
+  "106101400": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "106103617": {
+    "nearest_beach_km": 18.5,
+    "nearest_beach_name": "Beach"
+  },
+  "106119855": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Beach"
+  },
+  "106133090": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "106144540": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "106171935": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de la Goleta"
+  },
+  "106188134": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "106197877": {
+    "nearest_beach_km": 11.5,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "106226151": {
+    "nearest_beach_km": 6.4,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "106226152": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "106254636": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "106270227": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "106290668": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "106315811": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106320758": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "106340820": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de la Barraca"
+  },
+  "106342898": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106354406": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Beach"
+  },
+  "106369454": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106386736": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106399716": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja de Llevant"
+  },
+  "106406370": {
+    "nearest_beach_km": 4.1,
+    "nearest_beach_name": "Beach"
+  },
+  "106423042": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "106423479": {
+    "nearest_beach_km": 11.2,
+    "nearest_beach_name": "Beach"
+  },
+  "106423480": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja Belcaire"
+  },
+  "106423482": {
+    "nearest_beach_km": 7.7,
+    "nearest_beach_name": "Platja Naturista de Moncofa"
+  },
+  "106423981": {
+    "nearest_beach_km": 1.7,
+    "nearest_beach_name": "la Caleta"
+  },
+  "106451303": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Cala de Llebeig"
+  },
+  "106460797": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "106462897": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106479242": {
+    "nearest_beach_km": 4.1,
+    "nearest_beach_name": "Playa de La Mata"
+  },
+  "106524970": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106534468": {
+    "nearest_beach_km": 12.3,
+    "nearest_beach_name": "Beach"
+  },
+  "106535571": {
+    "nearest_beach_km": 12.9,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "106566064": {
+    "nearest_beach_km": 9.8,
+    "nearest_beach_name": "Platja de la Patacona"
+  },
+  "106597064": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Playa de la Colonia"
+  },
+  "106607041": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "106625889": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja Belcaire"
+  },
+  "106630615": {
+    "nearest_beach_km": 18.8,
+    "nearest_beach_name": "Playa de Piedra Mala"
+  },
+  "106632496": {
+    "nearest_beach_km": 9.4,
+    "nearest_beach_name": "Beach"
+  },
+  "106646870": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Les Deveses"
+  },
+  "106679552": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "106697545": {
+    "nearest_beach_km": 10.1,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "106700192": {
+    "nearest_beach_km": 1.7,
+    "nearest_beach_name": "Platja dels Marenys de Rafalca\u00efd"
+  },
+  "106742786": {
+    "nearest_beach_km": 4.0,
+    "nearest_beach_name": "Beach"
+  },
+  "106750669": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Playa del Pudrimel"
+  },
+  "106765343": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106765352": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106765392": {
+    "nearest_beach_km": 9.0,
+    "nearest_beach_name": "Beach"
+  },
+  "106771533": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106801400": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Playa de Poniente"
+  },
+  "106804048": {
+    "nearest_beach_km": 4.8,
+    "nearest_beach_name": "Platja dels Tossals"
+  },
+  "106804152": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106804261": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106804334": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "106848806": {
+    "nearest_beach_km": 8.5,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "106849756": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "106886137": {
+    "nearest_beach_km": 3.6,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "106923474": {
+    "nearest_beach_km": 7.6,
+    "nearest_beach_name": "Beach"
+  },
+  "106958190": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "107007901": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "107017034": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Platja dels Arenals del Sol"
+  },
+  "107017066": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja dels Arenals del Sol"
+  },
+  "107022760": {
+    "nearest_beach_km": 4.7,
+    "nearest_beach_name": "Beach"
+  },
+  "107027296": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala d'Ambolo"
+  },
+  "107027297": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Cala en Cal\u00f3"
+  },
+  "107027298": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "107027299": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Cala d'Ambolo"
+  },
+  "107049037": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Playa de las Higuericas"
+  },
+  "107089762": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Beach"
+  },
+  "107097558": {
+    "nearest_beach_km": 1.7,
+    "nearest_beach_name": "Platja de Sant Joan"
+  },
+  "107100022": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de Sant Gabriel"
+  },
+  "107109021": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "107111460": {
+    "nearest_beach_km": 19.4,
+    "nearest_beach_name": "Beach"
+  },
+  "107137032": {
+    "nearest_beach_km": 6.5,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "107161375": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Playa de Cabo Cervera"
+  },
+  "107167433": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Playa Vistamar"
+  },
+  "107176875": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "107180659": {
+    "nearest_beach_km": 4.0,
+    "nearest_beach_name": "Platja de la Roda"
+  },
+  "107184793": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Beach"
+  },
+  "107186576": {
+    "nearest_beach_km": 11.7,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "107186800": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de la Vila Joiosa"
+  },
+  "107188535": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de les Marines"
+  },
+  "107189079": {
+    "nearest_beach_km": 7.3,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "107209268": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de l'Amadrava"
+  },
+  "107210427": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "107276628": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "107280890": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Platja dels Marenys de Rafalca\u00efd"
+  },
+  "107303621": {
+    "nearest_beach_km": 3.0,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "107313311": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "107348337": {
+    "nearest_beach_km": 8.6,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "107358498": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "107375557": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "Platja de l'Albufereta"
+  },
+  "107379014": {
+    "nearest_beach_km": 6.3,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "107396927": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "107396938": {
+    "nearest_beach_km": 6.7,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "107408319": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "107437412": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "107452413": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala Advocat"
+  },
+  "107465160": {
+    "nearest_beach_km": 3.1,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "107468903": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "107472570": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de Santa Elvira-Torreta"
+  },
+  "107473067": {
+    "nearest_beach_km": 15.6,
+    "nearest_beach_name": "Beach"
+  },
+  "107486803": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Cala Higuera"
+  },
+  "107518885": {
+    "nearest_beach_km": 9.3,
+    "nearest_beach_name": "Beach"
+  },
+  "107534607": {
+    "nearest_beach_km": 2.2,
+    "nearest_beach_name": "Cala de lo Ferri"
+  },
+  "107541166": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "107552002": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "107561330": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Beach"
+  },
+  "107591609": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "107597707": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "107602478": {
+    "nearest_beach_km": 9.1,
+    "nearest_beach_name": "Beach"
+  },
+  "107619692": {
+    "nearest_beach_km": 11.6,
+    "nearest_beach_name": "Beach"
+  },
+  "107620290": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Playa Villananitos"
+  },
+  "107622087": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de la Fossa"
+  },
+  "107632996": {
+    "nearest_beach_km": 12.6,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "107633610": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "107639112": {
+    "nearest_beach_km": 9.7,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "107650130": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "107650478": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja del Cantal Roig"
+  },
+  "107682953": {
+    "nearest_beach_km": 18.0,
+    "nearest_beach_name": "Platja de la Malva-rosa de Corinto"
+  },
+  "107688912": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "107693504": {
+    "nearest_beach_km": 16.1,
+    "nearest_beach_name": "Cala dels Borratxos"
+  },
+  "107699933": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Platja de la Calalga"
+  },
+  "107734196": {
+    "nearest_beach_km": 3.5,
+    "nearest_beach_name": "Platja del Mal Pas"
+  },
+  "107753337": {
+    "nearest_beach_km": 3.4,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "107781423": {
+    "nearest_beach_km": 8.7,
+    "nearest_beach_name": "Beach"
+  },
+  "107785587": {
+    "nearest_beach_km": 8.8,
+    "nearest_beach_name": "Beach"
+  },
+  "107795772": {
+    "nearest_beach_km": 6.9,
+    "nearest_beach_name": "Beach"
+  },
+  "107799336": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "107806865": {
+    "nearest_beach_km": 3.9,
+    "nearest_beach_name": "Beach"
+  },
+  "107818126": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "107820383": {
+    "nearest_beach_km": 5.1,
+    "nearest_beach_name": "Beach"
+  },
+  "107824898": {
+    "nearest_beach_km": 6.8,
+    "nearest_beach_name": "Platja del Mal Pas"
+  },
+  "107824899": {
+    "nearest_beach_km": 18.3,
+    "nearest_beach_name": "Playa de Los N\u00e1ufragos"
+  },
+  "107832657": {
+    "nearest_beach_km": 9.0,
+    "nearest_beach_name": "Platja del Carrerlamar"
+  },
+  "107832983": {
+    "nearest_beach_km": 5.2,
+    "nearest_beach_name": "Beach"
+  },
+  "107868202": {
+    "nearest_beach_km": 12.1,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "107872077": {
+    "nearest_beach_km": 4.8,
+    "nearest_beach_name": "Platja de l'Albir"
+  },
+  "107878930": {
+    "nearest_beach_km": 4.2,
+    "nearest_beach_name": "Platja de l'Albufereta"
+  },
+  "107880131": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "107884535": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Platja del Carrerlamar"
+  },
+  "107898884": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala d'Ambolo"
+  },
+  "107898885": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "107902060": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja Belcaire"
+  },
+  "107922755": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de Plans"
+  },
+  "107932184": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "107935255": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de Canet"
+  },
+  "107939766": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Platja de l'Albir"
+  },
+  "107950886": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Beach"
+  },
+  "107950909": {
+    "nearest_beach_km": 8.8,
+    "nearest_beach_name": "Beach"
+  },
+  "107992832": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja de la Calalga"
+  },
+  "107996149": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "108000661": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "108003539": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Cala de la Llobella"
+  },
+  "108007400": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Playa de Cabo Cervera"
+  },
+  "108009044": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "108009732": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "\"Can\" Punta del Riu Sec"
+  },
+  "108011644": {
+    "nearest_beach_km": 2.2,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "108013037": {
+    "nearest_beach_km": 7.7,
+    "nearest_beach_name": "Beach"
+  },
+  "108025508": {
+    "nearest_beach_km": 13.1,
+    "nearest_beach_name": "Beach"
+  },
+  "108033049": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de Masb\u00f3"
+  },
+  "108044369": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "108047752": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Platja de Sant Gabriel"
+  },
+  "108073386": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja de Daim\u00fas"
+  },
+  "108082140": {
+    "nearest_beach_km": 4.2,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "108116972": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "108122277": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de Terranova"
+  },
+  "108143196": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "108154574": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "108169678": {
+    "nearest_beach_km": 3.6,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "108173370": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "108179587": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja del Coc\u00f3"
+  },
+  "108181731": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "108214247": {
+    "nearest_beach_km": 6.7,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "108222330": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de Sant Gabriel"
+  },
+  "108226930": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Platja de Massalfassar"
+  },
+  "108233264": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Platja de Sant Gabriel"
+  },
+  "108238773": {
+    "nearest_beach_km": 8.6,
+    "nearest_beach_name": "Playa Cala La Mosca"
+  },
+  "108241253": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "108252909": {
+    "nearest_beach_km": 10.8,
+    "nearest_beach_name": "Platja de la Gola"
+  },
+  "108259970": {
+    "nearest_beach_km": 7.4,
+    "nearest_beach_name": "Platja del Coc\u00f3"
+  },
+  "108283694": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Playa del Puerto"
+  },
+  "108285452": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "108293746": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Playa de Levante"
+  },
+  "108296571": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de l'Albir"
+  },
+  "108297793": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "108305786": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Beach"
+  },
+  "108308766": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "108321506": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "108323453": {
+    "nearest_beach_km": 17.4,
+    "nearest_beach_name": "Platja Centre"
+  },
+  "108332644": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Platja del Mal Pas"
+  },
+  "108334848": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja Babil\u00f2nia"
+  },
+  "108335249": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Playa Cala La Mosca"
+  },
+  "108350396": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja del Carrerlamar"
+  },
+  "108370410": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "108387263": {
+    "nearest_beach_km": 3.8,
+    "nearest_beach_name": "Platja del Carrerlamar"
+  },
+  "108387899": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Platja Centre"
+  },
+  "108406167": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Platja Sud de Pen\u00edscola"
+  },
+  "108421853": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Platja de Sant Antoni"
+  },
+  "108428606": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de l'Olla"
+  },
+  "108437989": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "108479100": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "108488520": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja del Carrerlamar"
+  },
+  "108495643": {
+    "nearest_beach_km": 4.0,
+    "nearest_beach_name": "Platja de Daim\u00fas"
+  },
+  "108503812": {
+    "nearest_beach_km": 7.9,
+    "nearest_beach_name": "Platja de La Roqueta"
+  },
+  "108505011": {
+    "nearest_beach_km": 11.4,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "108506889": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Beach"
+  },
+  "108514194": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja de Llevant"
+  },
+  "108519384": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "108527067": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Playa del Puerto"
+  },
+  "108528490": {
+    "nearest_beach_km": 6.9,
+    "nearest_beach_name": "Platja de Benafel\u00ed"
+  },
+  "108529396": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Cala Baladrar"
+  },
+  "108530933": {
+    "nearest_beach_km": 8.6,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "108555773": {
+    "nearest_beach_km": 3.0,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "108556655": {
+    "nearest_beach_km": 8.3,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "108573193": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "108577984": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "108577985": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "108584300": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Beach"
+  },
+  "108586801": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "108586802": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "108586803": {
+    "nearest_beach_km": 2.2,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "108586804": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "108586805": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala Advocat"
+  },
+  "108586817": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "108612518": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "108615274": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Beach"
+  },
+  "108617967": {
+    "nearest_beach_km": 7.4,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "108619389": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "108625882": {
+    "nearest_beach_km": 8.7,
+    "nearest_beach_name": "Beach"
+  },
+  "108629346": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Playa de El Pescador"
+  },
+  "108640346": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Playa de Poniente"
+  },
+  "108641428": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "108641429": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "108641430": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Beach"
+  },
+  "108641431": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "108641432": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Cala de Llebeig"
+  },
+  "108641433": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "108641434": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Cala la Man\u00e7anera"
+  },
+  "108641435": {
+    "nearest_beach_km": 2.2,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "108641447": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "108641469": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "108641470": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala del Portitxol"
+  },
+  "108641471": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Cala de Llebeig"
+  },
+  "108641472": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Cala en Cal\u00f3"
+  },
+  "108641473": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "108641474": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala d'Ambolo"
+  },
+  "108641475": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja de la Barraca"
+  },
+  "108641496": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "la Caleta"
+  },
+  "108641497": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Cala en Cal\u00f3"
+  },
+  "108641498": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Beach"
+  },
+  "108643509": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "108643510": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "108643511": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Platja de les Arenetes"
+  },
+  "108643512": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja de les Arenetes"
+  },
+  "108643513": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "108643514": {
+    "nearest_beach_km": 3.9,
+    "nearest_beach_name": "Albaranes"
+  },
+  "108643515": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de les Arenetes"
+  },
+  "108643535": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Platja de la Barraca"
+  },
+  "108643546": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Platja del Cantal Roig"
+  },
+  "108643547": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Platja de la Calalga"
+  },
+  "108643548": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "108643566": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "la Caleta"
+  },
+  "108643567": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Cala d'Ambolo"
+  },
+  "108643568": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de la Barraca"
+  },
+  "108643569": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala d'Ambolo"
+  },
+  "108643570": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja de la Barraca"
+  },
+  "108643571": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Cala en Cal\u00f3"
+  },
+  "108643572": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Cala d'Ambolo"
+  },
+  "108643573": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala en Cal\u00f3"
+  },
+  "108643775": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "108643786": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Cala del Portitxol"
+  },
+  "108643789": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Cala en Cal\u00f3"
+  },
+  "108643791": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Beach"
+  },
+  "108643792": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Beach"
+  },
+  "108643793": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "la Caleta"
+  },
+  "108643794": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de la Barreta de Gualda"
+  },
+  "108653646": {
+    "nearest_beach_km": 5.5,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "108663692": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "108681317": {
+    "nearest_beach_km": 12.4,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "108682856": {
+    "nearest_beach_km": 5.1,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "108683558": {
+    "nearest_beach_km": 6.4,
+    "nearest_beach_name": "Beach"
+  },
+  "108690203": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja de la Vila Joiosa"
+  },
+  "108691544": {
+    "nearest_beach_km": 16.2,
+    "nearest_beach_name": "Beach"
+  },
+  "108693502": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Platja de Masb\u00f3"
+  },
+  "108698250": {
+    "nearest_beach_km": 9.0,
+    "nearest_beach_name": "Beach"
+  },
+  "108705549": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de Plans"
+  },
+  "108708551": {
+    "nearest_beach_km": 11.5,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "108727223": {
+    "nearest_beach_km": 7.0,
+    "nearest_beach_name": "Platja de l'Arbre del Gos"
+  },
+  "108748057": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Platja de la Patacona"
+  },
+  "108751676": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "Platja de Massalfassar"
+  },
+  "108763943": {
+    "nearest_beach_km": 4.2,
+    "nearest_beach_name": "Platja de l'Albufereta"
+  },
+  "108788555": {
+    "nearest_beach_km": 7.9,
+    "nearest_beach_name": "Platja del Montcaio"
+  },
+  "108788606": {
+    "nearest_beach_km": 6.7,
+    "nearest_beach_name": "Playa de Aguamarina"
+  },
+  "108788607": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Cala de lo Ferri"
+  },
+  "108793703": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "108795216": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "108816401": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "108816618": {
+    "nearest_beach_km": 11.4,
+    "nearest_beach_name": "Beach"
+  },
+  "108825994": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de Torrenostra"
+  },
+  "108828650": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "108842503": {
+    "nearest_beach_km": 7.4,
+    "nearest_beach_name": "Beach"
+  },
+  "108860922": {
+    "nearest_beach_km": 3.9,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "108900178": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Playa del Puerto"
+  },
+  "108902944": {
+    "nearest_beach_km": 5.7,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "108910393": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "108913638": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "108922468": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de Ven\u00e8cia"
+  },
+  "108941536": {
+    "nearest_beach_km": 5.9,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "108951790": {
+    "nearest_beach_km": 3.8,
+    "nearest_beach_name": "Beach"
+  },
+  "108968059": {
+    "nearest_beach_km": 17.0,
+    "nearest_beach_name": "Beach"
+  },
+  "108968409": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Beach"
+  },
+  "108970236": {
+    "nearest_beach_km": 7.1,
+    "nearest_beach_name": "Platja del Coc\u00f3"
+  },
+  "108971714": {
+    "nearest_beach_km": 6.3,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "108983410": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "108983411": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Beach"
+  },
+  "108983413": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Cala del Rac\u00f3 del Corb"
+  },
+  "108993482": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "108994470": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Playa de las Higuericas"
+  },
+  "108995351": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "109018470": {
+    "nearest_beach_km": 4.1,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "109048406": {
+    "nearest_beach_km": 5.7,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "109049585": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Beach"
+  },
+  "109050270": {
+    "nearest_beach_km": 5.2,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "109057720": {
+    "nearest_beach_km": 14.8,
+    "nearest_beach_name": "Cala El Palmeral"
+  },
+  "109059124": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Platja de Ponent"
+  },
+  "109060359": {
+    "nearest_beach_km": 18.9,
+    "nearest_beach_name": "Beach"
+  },
+  "109065911": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109075177": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "109075192": {
+    "nearest_beach_km": 6.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109075605": {
+    "nearest_beach_km": 5.3,
+    "nearest_beach_name": "Platja de l'Amadrava"
+  },
+  "109076472": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "109097251": {
+    "nearest_beach_km": 7.9,
+    "nearest_beach_name": "Beach"
+  },
+  "109103918": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de Masb\u00f3"
+  },
+  "109112148": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja Belcaire"
+  },
+  "109127059": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "109127060": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "109127061": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "109127062": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "109150119": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Cala Lanuza"
+  },
+  "109161109": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109184348": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Beach"
+  },
+  "109186761": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "el Torres"
+  },
+  "109196603": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "109198082": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Beach"
+  },
+  "109217791": {
+    "nearest_beach_km": 17.5,
+    "nearest_beach_name": "Beach"
+  },
+  "109220030": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Playa Villananitos"
+  },
+  "109225583": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Negra"
+  },
+  "109227779": {
+    "nearest_beach_km": 5.9,
+    "nearest_beach_name": "Beach"
+  },
+  "109229135": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de la Vila Joiosa"
+  },
+  "109238233": {
+    "nearest_beach_km": 9.5,
+    "nearest_beach_name": "Beach"
+  },
+  "109239091": {
+    "nearest_beach_km": 10.9,
+    "nearest_beach_name": "Beach"
+  },
+  "109241262": {
+    "nearest_beach_km": 6.1,
+    "nearest_beach_name": "Beach"
+  },
+  "109247656": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "109250608": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja del Portet"
+  },
+  "109254710": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "109261614": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Cala Baladrar"
+  },
+  "109261917": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109280712": {
+    "nearest_beach_km": 11.2,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "109280755": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109299112": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Playa del Acequi\u00f3n"
+  },
+  "109302827": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Beach"
+  },
+  "109303076": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Playa de la Colonia"
+  },
+  "109316934": {
+    "nearest_beach_km": 7.1,
+    "nearest_beach_name": "Beach"
+  },
+  "109317188": {
+    "nearest_beach_km": 5.5,
+    "nearest_beach_name": "Beach"
+  },
+  "109323630": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Platja de Massalfassar"
+  },
+  "109328919": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "109334101": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109336798": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109340728": {
+    "nearest_beach_km": 6.7,
+    "nearest_beach_name": "Beach"
+  },
+  "109354052": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109355331": {
+    "nearest_beach_km": 3.9,
+    "nearest_beach_name": "el Torres"
+  },
+  "109367713": {
+    "nearest_beach_km": 6.5,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "109368836": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109369910": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "109371265": {
+    "nearest_beach_km": 7.8,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "109371555": {
+    "nearest_beach_km": 6.8,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "109372879": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "109378849": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Cala del Ministre"
+  },
+  "109385017": {
+    "nearest_beach_km": 19.3,
+    "nearest_beach_name": "Beach"
+  },
+  "109390842": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Playa del Acequi\u00f3n"
+  },
+  "109390949": {
+    "nearest_beach_km": 3.4,
+    "nearest_beach_name": "La zorra"
+  },
+  "109395059": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Playa de Cabo Cervera"
+  },
+  "109403666": {
+    "nearest_beach_km": 12.9,
+    "nearest_beach_name": "Beach"
+  },
+  "109403949": {
+    "nearest_beach_km": 5.1,
+    "nearest_beach_name": "Beach"
+  },
+  "109406333": {
+    "nearest_beach_km": 7.1,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "109419490": {
+    "nearest_beach_km": 3.8,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "109423056": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "109427514": {
+    "nearest_beach_km": 4.7,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "109428207": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Platja del Carrerlamar"
+  },
+  "109431747": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "109432103": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Cala Flores"
+  },
+  "109435997": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de Ponent"
+  },
+  "109437661": {
+    "nearest_beach_km": 13.6,
+    "nearest_beach_name": "Platja Centre"
+  },
+  "109438400": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Platja de l'Albufereta"
+  },
+  "109438750": {
+    "nearest_beach_km": 6.5,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "109446397": {
+    "nearest_beach_km": 14.0,
+    "nearest_beach_name": "Cala El Palmeral"
+  },
+  "109452421": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja dels Terrers"
+  },
+  "109457832": {
+    "nearest_beach_km": 6.3,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "109460445": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "109460616": {
+    "nearest_beach_km": 5.8,
+    "nearest_beach_name": "Beach"
+  },
+  "109461412": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja Gran"
+  },
+  "109474108": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109476754": {
+    "nearest_beach_km": 12.0,
+    "nearest_beach_name": "Beach"
+  },
+  "109490543": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109519575": {
+    "nearest_beach_km": 12.7,
+    "nearest_beach_name": "Beach"
+  },
+  "109538092": {
+    "nearest_beach_km": 3.6,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "109539757": {
+    "nearest_beach_km": 5.3,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "109552411": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "109556424": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "109562328": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109562339": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109564563": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109582168": {
+    "nearest_beach_km": 13.7,
+    "nearest_beach_name": "Beach"
+  },
+  "109587655": {
+    "nearest_beach_km": 5.9,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "109591484": {
+    "nearest_beach_km": 6.8,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "109594564": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja de Canet"
+  },
+  "109598184": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja del Gurug\u00fa"
+  },
+  "109598401": {
+    "nearest_beach_km": 5.8,
+    "nearest_beach_name": "Platja de Benafel\u00ed"
+  },
+  "109601144": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "109601901": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "109603119": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "109617839": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Playa de las Villas"
+  },
+  "109618601": {
+    "nearest_beach_km": 7.9,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "109619459": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Beach"
+  },
+  "109622305": {
+    "nearest_beach_km": 5.5,
+    "nearest_beach_name": "Platja de les Marines"
+  },
+  "109623301": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "109623867": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109632671": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Beach"
+  },
+  "109634061": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Playa de Cabo Cervera"
+  },
+  "109639545": {
+    "nearest_beach_km": 4.0,
+    "nearest_beach_name": "Beach"
+  },
+  "109662850": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "Cala de la Sangueta"
+  },
+  "109663169": {
+    "nearest_beach_km": 7.2,
+    "nearest_beach_name": "Beach"
+  },
+  "109664974": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "109666333": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109666950": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Platja de Sant Joan"
+  },
+  "109667809": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Playa de las Villas"
+  },
+  "109669696": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "109669697": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "109680254": {
+    "nearest_beach_km": 7.9,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "109681318": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Cala Baladrar"
+  },
+  "109683443": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "109687362": {
+    "nearest_beach_km": 1.7,
+    "nearest_beach_name": "Playa Cola de Caballo"
+  },
+  "109687884": {
+    "nearest_beach_km": 9.9,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "109694860": {
+    "nearest_beach_km": 15.2,
+    "nearest_beach_name": "Platja de les Pesqueres - el Rebollo"
+  },
+  "109699384": {
+    "nearest_beach_km": 8.5,
+    "nearest_beach_name": "Beach"
+  },
+  "109706516": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "109706622": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109708012": {
+    "nearest_beach_km": 18.8,
+    "nearest_beach_name": "Beach"
+  },
+  "109708628": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109709397": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Playa de Levante de Islas Menores"
+  },
+  "109709853": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "109710793": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Platja del Carrerlamar"
+  },
+  "109715322": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Beach"
+  },
+  "109720288": {
+    "nearest_beach_km": 15.0,
+    "nearest_beach_name": "Platja de la Malva-rosa de Corinto"
+  },
+  "109722121": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Cala de la Llobella"
+  },
+  "109722125": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "109722186": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "109722188": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala de la Llobella"
+  },
+  "109722189": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "109722191": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "109722192": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de la Calalga"
+  },
+  "109722193": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "109722196": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Cala Advocat"
+  },
+  "109722197": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja del Bol"
+  },
+  "109722198": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "109722199": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "109722201": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "109722205": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de la Barreta de Gualda"
+  },
+  "109722206": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Beach"
+  },
+  "109722208": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "109722209": {
+    "nearest_beach_km": 4.0,
+    "nearest_beach_name": "Platja de l'Olla"
+  },
+  "109722210": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "109722214": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Beach"
+  },
+  "109722216": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja del Mascarat"
+  },
+  "109722217": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala del Mallorqu\u00ed"
+  },
+  "109722218": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Cala Baladrar"
+  },
+  "109722219": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Cala les Urques"
+  },
+  "109722222": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "109722223": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Cala del Morell\u00f3"
+  },
+  "109722224": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "109722225": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala del Rac\u00f3 del Corb"
+  },
+  "109722227": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "109722228": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Cala Baladrar"
+  },
+  "109722229": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "109722230": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "109722232": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja del Portet"
+  },
+  "109726280": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109729877": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "109729890": {
+    "nearest_beach_km": 9.2,
+    "nearest_beach_name": "Beach"
+  },
+  "109730789": {
+    "nearest_beach_km": 6.8,
+    "nearest_beach_name": "Platja de l'Arbre del Gos"
+  },
+  "109731659": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Cala de Llebeig"
+  },
+  "109731660": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Cala de Llebeig"
+  },
+  "109737750": {
+    "nearest_beach_km": 5.3,
+    "nearest_beach_name": "el Torres"
+  },
+  "109743435": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Cala de lo Ferri"
+  },
+  "109752893": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de l'Algoleja"
+  },
+  "109754190": {
+    "nearest_beach_km": 9.1,
+    "nearest_beach_name": "Beach"
+  },
+  "109761590": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "\"Can\" Punta del Riu Sec"
+  },
+  "109765260": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "109774294": {
+    "nearest_beach_km": 18.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109774300": {
+    "nearest_beach_km": 18.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109774484": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "109779789": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "109780277": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "109782125": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "el Torres"
+  },
+  "109785850": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "109788652": {
+    "nearest_beach_km": 8.8,
+    "nearest_beach_name": "Beach"
+  },
+  "109788824": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "109791009": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Beach"
+  },
+  "109797823": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de la Barraca"
+  },
+  "109798486": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109801658": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja Centre"
+  },
+  "109815334": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Beach"
+  },
+  "109825581": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109825582": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109826779": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109828500": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja del Morrongo"
+  },
+  "109830539": {
+    "nearest_beach_km": 6.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109831599": {
+    "nearest_beach_km": 19.0,
+    "nearest_beach_name": "Beach"
+  },
+  "109832108": {
+    "nearest_beach_km": 8.3,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "109835473": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Beach"
+  },
+  "109839067": {
+    "nearest_beach_km": 13.9,
+    "nearest_beach_name": "Beach"
+  },
+  "109840117": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja de la Vila Joiosa"
+  },
+  "109842474": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109842475": {
+    "nearest_beach_km": 12.9,
+    "nearest_beach_name": "Playa de Los N\u00e1ufragos"
+  },
+  "109842556": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "109842557": {
+    "nearest_beach_km": 7.8,
+    "nearest_beach_name": "Playa Cala La Mosca"
+  },
+  "109842558": {
+    "nearest_beach_km": 10.1,
+    "nearest_beach_name": "Platja de La Roqueta"
+  },
+  "109842559": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "Platja dels Tossals"
+  },
+  "109842560": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "109842562": {
+    "nearest_beach_km": 5.8,
+    "nearest_beach_name": "Platja de les Ortigues"
+  },
+  "109842563": {
+    "nearest_beach_km": 5.3,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "109842597": {
+    "nearest_beach_km": 8.2,
+    "nearest_beach_name": "Platja de les Ortigues"
+  },
+  "109842598": {
+    "nearest_beach_km": 7.5,
+    "nearest_beach_name": "Platja del Montcaio"
+  },
+  "109842599": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Platja de les Pesqueres - el Rebollo"
+  },
+  "109842601": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Beach"
+  },
+  "109842603": {
+    "nearest_beach_km": 7.5,
+    "nearest_beach_name": "Platja del Montcaio"
+  },
+  "109842604": {
+    "nearest_beach_km": 13.2,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "109842620": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Platja de les Pesqueres - el Rebollo"
+  },
+  "109842621": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja del Montcaio"
+  },
+  "109842622": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Playa de los Jesu\u00edtas"
+  },
+  "109842623": {
+    "nearest_beach_km": 6.4,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "109842624": {
+    "nearest_beach_km": 5.2,
+    "nearest_beach_name": "Platja Centre"
+  },
+  "109842625": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Playa Las Charcas"
+  },
+  "109842646": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "109853217": {
+    "nearest_beach_km": 12.9,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "109853435": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "109854091": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Platja del Carrerlamar"
+  },
+  "109854122": {
+    "nearest_beach_km": 8.2,
+    "nearest_beach_name": "Beach"
+  },
+  "109854183": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "109854184": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja del Cantal Roig"
+  },
+  "109855094": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Platja Punta del Raset"
+  },
+  "109856055": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Cala de Baessa"
+  },
+  "109856152": {
+    "nearest_beach_km": 3.9,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "109864440": {
+    "nearest_beach_km": 10.9,
+    "nearest_beach_name": "Beach"
+  },
+  "109867954": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Beach"
+  },
+  "109868801": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Beach"
+  },
+  "109868802": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "109886590": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Beach"
+  },
+  "109886591": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Cala Baladrar"
+  },
+  "109886592": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "109890096": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Beach"
+  },
+  "109890171": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "109900576": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja de Sant Gabriel"
+  },
+  "109900714": {
+    "nearest_beach_km": 6.4,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "109914199": {
+    "nearest_beach_km": 3.5,
+    "nearest_beach_name": "Platja del Cirerer"
+  },
+  "109914206": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Beach"
+  },
+  "109917638": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "109917693": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Cala de Llebeig"
+  },
+  "109917746": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Cala de Llebeig"
+  },
+  "109917747": {
+    "nearest_beach_km": 2.2,
+    "nearest_beach_name": "Beach"
+  },
+  "109917748": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Cala del Moraig"
+  },
+  "109917749": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala de la Llobella"
+  },
+  "109917750": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "109917751": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Beach"
+  },
+  "109917752": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Cala de l'Andrag\u00f3"
+  },
+  "109919495": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja de Cap Blanc"
+  },
+  "109947599": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Platja de Massalfassar"
+  },
+  "109951690": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Platja de la Patacona"
+  },
+  "109954384": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Cala del Franc\u00e9s"
+  },
+  "109958613": {
+    "nearest_beach_km": 6.3,
+    "nearest_beach_name": "Cala Mosca"
+  },
+  "109967363": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Playa del Acequi\u00f3n"
+  },
+  "109971751": {
+    "nearest_beach_km": 4.1,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "109971862": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "109981800": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de la Calalga"
+  },
+  "109984448": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Beach"
+  },
+  "109984772": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Beach"
+  },
+  "109985176": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Playa del Cura"
+  },
+  "109985950": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja del Pla de la Torre"
+  },
+  "109987144": {
+    "nearest_beach_km": 3.1,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "109988121": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Platja del Puig"
+  },
+  "109988318": {
+    "nearest_beach_km": 3.5,
+    "nearest_beach_name": "Platja de Massalfassar"
+  },
+  "109988346": {
+    "nearest_beach_km": 6.4,
+    "nearest_beach_name": "Beach"
+  },
+  "109991370": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "109994056": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "109996265": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Cala Cortina"
+  },
+  "110006467": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "110006468": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Caleta de l'Amerador"
+  },
+  "110006471": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "110013061": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja del Cura"
+  },
+  "110013233": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Playa Villananitos"
+  },
+  "110014055": {
+    "nearest_beach_km": 6.0,
+    "nearest_beach_name": "Platja de Guardamar de la Safor"
+  },
+  "110014751": {
+    "nearest_beach_km": 6.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110021167": {
+    "nearest_beach_km": 3.4,
+    "nearest_beach_name": "Platja dels Marenys de Rafalca\u00efd"
+  },
+  "110021817": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "110023381": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "110027849": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "110028378": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "110033727": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "Playa de Aguamarina"
+  },
+  "110036709": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Beach"
+  },
+  "110039835": {
+    "nearest_beach_km": 16.3,
+    "nearest_beach_name": "Platja del Rei"
+  },
+  "110049218": {
+    "nearest_beach_km": 7.0,
+    "nearest_beach_name": "Beach"
+  },
+  "110049230": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Beach"
+  },
+  "110049508": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "110049592": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "110056344": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "110060818": {
+    "nearest_beach_km": 7.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110062657": {
+    "nearest_beach_km": 3.0,
+    "nearest_beach_name": "Platja Punta del Raset"
+  },
+  "110064852": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "110064853": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "110066279": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Platja de Llevant"
+  },
+  "110066732": {
+    "nearest_beach_km": 6.3,
+    "nearest_beach_name": "Platja de l'Amerador"
+  },
+  "110082498": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de Ponent"
+  },
+  "110082499": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja de la Vila Joiosa"
+  },
+  "110084761": {
+    "nearest_beach_km": 4.8,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110085112": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110086765": {
+    "nearest_beach_km": 3.6,
+    "nearest_beach_name": "Beach"
+  },
+  "110090836": {
+    "nearest_beach_km": 12.4,
+    "nearest_beach_name": "Beach"
+  },
+  "110091590": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Playa del Puerto"
+  },
+  "110094520": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110096933": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Cala d'Ambolo"
+  },
+  "110126246": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Playa de la Isla"
+  },
+  "110127030": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "cala Piteres"
+  },
+  "110136867": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Cala de la Sangueta"
+  },
+  "110140837": {
+    "nearest_beach_km": 5.7,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "110141918": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Cala del Franc\u00e9s"
+  },
+  "110143022": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Playa Cala La Mosca"
+  },
+  "110146877": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "110147553": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110148598": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Playa Las Charcas"
+  },
+  "110149995": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Beach"
+  },
+  "110150435": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "110151870": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de Massalfassar"
+  },
+  "110153241": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Playa de Bolnuevo"
+  },
+  "110156392": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de Casablanca"
+  },
+  "110158221": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja del Puig"
+  },
+  "110158337": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "\"Can\" Punta del Riu Sec"
+  },
+  "110159132": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "110159386": {
+    "nearest_beach_km": 8.7,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "110160910": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "110165742": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Beach"
+  },
+  "110167213": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Platja dels Marenys de Rafalca\u00efd"
+  },
+  "110167866": {
+    "nearest_beach_km": 5.8,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110182255": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "110182411": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "110182412": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "110182427": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "110183559": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja Gran"
+  },
+  "110183561": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala del Moro"
+  },
+  "110183562": {
+    "nearest_beach_km": 14.7,
+    "nearest_beach_name": "Cala El Palmeral"
+  },
+  "110188553": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala del Moro"
+  },
+  "110188583": {
+    "nearest_beach_km": 3.6,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "110189637": {
+    "nearest_beach_km": 7.5,
+    "nearest_beach_name": "Platja del Saler"
+  },
+  "110191853": {
+    "nearest_beach_km": 13.4,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "110191988": {
+    "nearest_beach_km": 5.9,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "110192153": {
+    "nearest_beach_km": 10.5,
+    "nearest_beach_name": "Platja dels Tossals"
+  },
+  "110201224": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "110202702": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala dels Borratxos"
+  },
+  "110209586": {
+    "nearest_beach_km": 11.9,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110212209": {
+    "nearest_beach_km": 6.1,
+    "nearest_beach_name": "Beach"
+  },
+  "110212872": {
+    "nearest_beach_km": 3.8,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "110214167": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "110218122": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "110219378": {
+    "nearest_beach_km": 3.7,
+    "nearest_beach_name": "Platja del Carrerlamar"
+  },
+  "110219595": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja dels Arenals del Sol"
+  },
+  "110221833": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "110237600": {
+    "nearest_beach_km": 4.7,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "110248928": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110249902": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de la Barreta de Gualda"
+  },
+  "110251036": {
+    "nearest_beach_km": 6.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110260595": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Cala de Baessa"
+  },
+  "110263744": {
+    "nearest_beach_km": 5.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110273469": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de La Roqueta"
+  },
+  "110284132": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Platja de l'Horta-Mutxavista"
+  },
+  "110286753": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110287083": {
+    "nearest_beach_km": 6.6,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110287384": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "110288900": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Playa del Acequi\u00f3n"
+  },
+  "110291657": {
+    "nearest_beach_km": 3.6,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "110291802": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Platja de l'Albir"
+  },
+  "110292198": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "110300079": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110301834": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja de la Vila Joiosa"
+  },
+  "110302010": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja Sud de Pen\u00edscola"
+  },
+  "110306841": {
+    "nearest_beach_km": 5.1,
+    "nearest_beach_name": "Beach"
+  },
+  "110310376": {
+    "nearest_beach_km": 12.0,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "110316229": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "110318788": {
+    "nearest_beach_km": 6.8,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110319139": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110321697": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Platja dels Marenys de Rafalca\u00efd"
+  },
+  "110324602": {
+    "nearest_beach_km": 4.8,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "110325769": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110325955": {
+    "nearest_beach_km": 9.9,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "110326653": {
+    "nearest_beach_km": 1.7,
+    "nearest_beach_name": "\"Can\" Punta del Riu Sec"
+  },
+  "110331214": {
+    "nearest_beach_km": 9.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110352691": {
+    "nearest_beach_km": 5.9,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "110360839": {
+    "nearest_beach_km": 9.1,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "110362236": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "110362617": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110363793": {
+    "nearest_beach_km": 4.8,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "110367569": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja del Pinet"
+  },
+  "110370347": {
+    "nearest_beach_km": 14.1,
+    "nearest_beach_name": "Beach"
+  },
+  "110370752": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja del Port de Sagunt"
+  },
+  "110371383": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Beach"
+  },
+  "110371665": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "110373345": {
+    "nearest_beach_km": 11.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110373456": {
+    "nearest_beach_km": 11.7,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "110373457": {
+    "nearest_beach_km": 6.9,
+    "nearest_beach_name": "Cala Mosca"
+  },
+  "110373458": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110373461": {
+    "nearest_beach_km": 4.8,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "110373462": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Playa Cala Bosque"
+  },
+  "110373463": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "110373464": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Beach"
+  },
+  "110389430": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Platja de l'Albir"
+  },
+  "110395082": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Playa del Puerto"
+  },
+  "110400907": {
+    "nearest_beach_km": 3.0,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "110402249": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Platja del Carabass\u00ed"
+  },
+  "110414927": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "Beach"
+  },
+  "110438144": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110439206": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110442574": {
+    "nearest_beach_km": 3.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110450475": {
+    "nearest_beach_km": 5.3,
+    "nearest_beach_name": "Platja Punta del Raset"
+  },
+  "110452464": {
+    "nearest_beach_km": 12.0,
+    "nearest_beach_name": "Beach"
+  },
+  "110453377": {
+    "nearest_beach_km": 8.6,
+    "nearest_beach_name": "Beach"
+  },
+  "110458720": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Playa del Puerto"
+  },
+  "110464678": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Beach"
+  },
+  "110464705": {
+    "nearest_beach_km": 3.6,
+    "nearest_beach_name": "Cala Cortina"
+  },
+  "110465219": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Platja dels Arenals del Sol"
+  },
+  "110467140": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110468499": {
+    "nearest_beach_km": 9.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110470037": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "110470337": {
+    "nearest_beach_km": 8.3,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "110471951": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "110472982": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110478858": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110480208": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "110480209": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Cala de la Llobella"
+  },
+  "110480210": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala del Moraig"
+  },
+  "110480211": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "110480302": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110481434": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110481713": {
+    "nearest_beach_km": 8.4,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "110482112": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "110482596": {
+    "nearest_beach_km": 6.4,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "110482769": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "110483592": {
+    "nearest_beach_km": 8.4,
+    "nearest_beach_name": "Beach"
+  },
+  "110483997": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Platja Punta del Raset"
+  },
+  "110484034": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110484035": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Playa Villananitos"
+  },
+  "110484106": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja del Pinet"
+  },
+  "110484968": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "El Gachero"
+  },
+  "110485004": {
+    "nearest_beach_km": 2.5,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "110493392": {
+    "nearest_beach_km": 12.0,
+    "nearest_beach_name": "Beach"
+  },
+  "110494037": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "El Alamillo"
+  },
+  "110494054": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "110494055": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "La zorra"
+  },
+  "110494086": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala Piteras"
+  },
+  "110495291": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "110510581": {
+    "nearest_beach_km": 9.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110513689": {
+    "nearest_beach_km": 8.7,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "110521350": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja de Fora del Forat"
+  },
+  "110522516": {
+    "nearest_beach_km": 5.4,
+    "nearest_beach_name": "Platja de Vistabella"
+  },
+  "110522729": {
+    "nearest_beach_km": 16.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110532063": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja Babil\u00f2nia"
+  },
+  "110533282": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "110534340": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de la Solsida"
+  },
+  "110535089": {
+    "nearest_beach_km": 3.8,
+    "nearest_beach_name": "Platja del Cirerer"
+  },
+  "110536345": {
+    "nearest_beach_km": 6.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110536540": {
+    "nearest_beach_km": 11.9,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110538046": {
+    "nearest_beach_km": 7.4,
+    "nearest_beach_name": "Platja de l'Amerador"
+  },
+  "110538165": {
+    "nearest_beach_km": 5.6,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "110539356": {
+    "nearest_beach_km": 4.7,
+    "nearest_beach_name": "Beach"
+  },
+  "110543468": {
+    "nearest_beach_km": 11.2,
+    "nearest_beach_name": "Beach"
+  },
+  "110543881": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "110543911": {
+    "nearest_beach_km": 15.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110551325": {
+    "nearest_beach_km": 3.8,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "110552154": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "110560877": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110560878": {
+    "nearest_beach_km": 8.2,
+    "nearest_beach_name": "Platja de Meliana"
+  },
+  "110561014": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Cala de l'Andrag\u00f3"
+  },
+  "110563025": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110563208": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110579859": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Platja Babil\u00f2nia"
+  },
+  "110580579": {
+    "nearest_beach_km": 3.9,
+    "nearest_beach_name": "el Torres"
+  },
+  "110581824": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Playa Cala La Mosca"
+  },
+  "110582279": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Platja de la Calalga"
+  },
+  "110582893": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Cala de Baessa"
+  },
+  "110593605": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "110596001": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja del Parad\u00eds"
+  },
+  "110597018": {
+    "nearest_beach_km": 3.1,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "110599304": {
+    "nearest_beach_km": 5.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110604169": {
+    "nearest_beach_km": 7.1,
+    "nearest_beach_name": "Platja del Mal Pas"
+  },
+  "110606763": {
+    "nearest_beach_km": 7.1,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "110609204": {
+    "nearest_beach_km": 8.7,
+    "nearest_beach_name": "Beach"
+  },
+  "110610585": {
+    "nearest_beach_km": 8.2,
+    "nearest_beach_name": "Platja dels Ferros"
+  },
+  "110612979": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Platja del Carabass\u00ed"
+  },
+  "110617685": {
+    "nearest_beach_km": 14.9,
+    "nearest_beach_name": "Cala El Palmeral"
+  },
+  "110617799": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110618866": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Playa Cala La Mosca"
+  },
+  "110620113": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Platja de les Salines"
+  },
+  "110623282": {
+    "nearest_beach_km": 11.1,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110625623": {
+    "nearest_beach_km": 6.5,
+    "nearest_beach_name": "Beach"
+  },
+  "110625892": {
+    "nearest_beach_km": 6.8,
+    "nearest_beach_name": "Platja de Benafel\u00ed"
+  },
+  "110628629": {
+    "nearest_beach_km": 11.2,
+    "nearest_beach_name": "Beach"
+  },
+  "110630342": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110631176": {
+    "nearest_beach_km": 12.3,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110645569": {
+    "nearest_beach_km": 3.5,
+    "nearest_beach_name": "La zorra"
+  },
+  "110646362": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "110646363": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "110650836": {
+    "nearest_beach_km": 6.7,
+    "nearest_beach_name": "Platja del Coc\u00f3"
+  },
+  "110654850": {
+    "nearest_beach_km": 13.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110656459": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Cala de Finestrat"
+  },
+  "110657322": {
+    "nearest_beach_km": 9.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110660865": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110661122": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Playa Cola de Caballo"
+  },
+  "110662097": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110676383": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Beach"
+  },
+  "110682209": {
+    "nearest_beach_km": 19.8,
+    "nearest_beach_name": "Beach"
+  },
+  "110683744": {
+    "nearest_beach_km": 4.7,
+    "nearest_beach_name": "Beach"
+  },
+  "110686700": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "110686701": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Cala de la Granadella"
+  },
+  "110688555": {
+    "nearest_beach_km": 1.3,
+    "nearest_beach_name": "Les Deveses"
+  },
+  "110693936": {
+    "nearest_beach_km": 2.8,
+    "nearest_beach_name": "Playa del Acequi\u00f3n"
+  },
+  "110693937": {
+    "nearest_beach_km": 14.9,
+    "nearest_beach_name": "Cala El Palmeral"
+  },
+  "110695207": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Platja de les Platgetes"
+  },
+  "110695208": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "Platja de la Marineta Cassiana"
+  },
+  "110695233": {
+    "nearest_beach_km": 4.6,
+    "nearest_beach_name": "Playa Cola de Caballo"
+  },
+  "110695441": {
+    "nearest_beach_km": 3.5,
+    "nearest_beach_name": "Platja de Massalfassar"
+  },
+  "110695442": {
+    "nearest_beach_km": 4.3,
+    "nearest_beach_name": "Platja de Massamagrell"
+  },
+  "110695995": {
+    "nearest_beach_km": 1.7,
+    "nearest_beach_name": "Cala del Moraig"
+  },
+  "110697128": {
+    "nearest_beach_km": 3.3,
+    "nearest_beach_name": "Cala de lo Ferri"
+  },
+  "110697235": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110698798": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Beach"
+  },
+  "110713031": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Platja del Pinet"
+  },
+  "110715478": {
+    "nearest_beach_km": 13.6,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110716489": {
+    "nearest_beach_km": 13.2,
+    "nearest_beach_name": "Beach"
+  },
+  "110718790": {
+    "nearest_beach_km": 8.5,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "110719101": {
+    "nearest_beach_km": 6.2,
+    "nearest_beach_name": "Platja de Benafel\u00ed"
+  },
+  "110728323": {
+    "nearest_beach_km": 6.3,
+    "nearest_beach_name": "Platja de l'Almadrava"
+  },
+  "110731785": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Cala Baladrar"
+  },
+  "110731826": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110731827": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110731828": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Cala de l'Andrag\u00f3"
+  },
+  "110733064": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja del Clot"
+  },
+  "110739733": {
+    "nearest_beach_km": 6.0,
+    "nearest_beach_name": "Platja de Benafel\u00ed"
+  },
+  "110740895": {
+    "nearest_beach_km": 8.3,
+    "nearest_beach_name": "Platja dels Molins"
+  },
+  "110743794": {
+    "nearest_beach_km": 9.6,
+    "nearest_beach_name": "Beach"
+  },
+  "110750436": {
+    "nearest_beach_km": 2.9,
+    "nearest_beach_name": "Platja de les Pesqueres - el Rebollo"
+  },
+  "110750461": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Playa Cala La Mosca"
+  },
+  "110753665": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "la Caleta"
+  },
+  "110753800": {
+    "nearest_beach_km": 7.5,
+    "nearest_beach_name": "Beach"
+  },
+  "110754889": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja de la Grava"
+  },
+  "110755100": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "110755340": {
+    "nearest_beach_km": 4.2,
+    "nearest_beach_name": "Platja de Daim\u00fas"
+  },
+  "110756694": {
+    "nearest_beach_km": 2.1,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "110760948": {
+    "nearest_beach_km": 0.5,
+    "nearest_beach_name": "Platja de la Conxa"
+  },
+  "110762124": {
+    "nearest_beach_km": 4.5,
+    "nearest_beach_name": "Platja del Pinar"
+  },
+  "110762674": {
+    "nearest_beach_km": 8.3,
+    "nearest_beach_name": "Platja de la Patacona"
+  },
+  "110765505": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "\"Can\" Punta del Riu Sec"
+  },
+  "110765517": {
+    "nearest_beach_km": 5.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110766078": {
+    "nearest_beach_km": 2.4,
+    "nearest_beach_name": "Playa de las Villas"
+  },
+  "110767001": {
+    "nearest_beach_km": 4.0,
+    "nearest_beach_name": "Platja del Mal Pas"
+  },
+  "110771211": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Platja de la Barraca"
+  },
+  "110771247": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Platja de l'Arenal"
+  },
+  "110783267": {
+    "nearest_beach_km": 7.7,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "110784170": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Platja de Ponent"
+  },
+  "110784389": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110785044": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Playa de Piedra Mala"
+  },
+  "110785181": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Beach"
+  },
+  "110785306": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Platja de la Barreta de Gualda"
+  },
+  "110785365": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Beach"
+  },
+  "110785480": {
+    "nearest_beach_km": 0.1,
+    "nearest_beach_name": "Beach"
+  },
+  "110785490": {
+    "nearest_beach_km": 13.1,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "110785550": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Cala de la Fustera"
+  },
+  "110785585": {
+    "nearest_beach_km": 0.6,
+    "nearest_beach_name": "Playa de las Higuericas"
+  },
+  "110785720": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Playa de Col\u00f3n"
+  },
+  "110785721": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Cala les Urques"
+  },
+  "110785792": {
+    "nearest_beach_km": 1.9,
+    "nearest_beach_name": "Platja de l'Ampolla"
+  },
+  "110785908": {
+    "nearest_beach_km": 3.1,
+    "nearest_beach_name": "Playa del Acequi\u00f3n"
+  },
+  "110785913": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Beach"
+  },
+  "110785968": {
+    "nearest_beach_km": 1.2,
+    "nearest_beach_name": "Playa Villananitos"
+  },
+  "110786043": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Cala Flores"
+  },
+  "110786096": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110786126": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Playa de Cabo Cervera"
+  },
+  "110786128": {
+    "nearest_beach_km": 0.2,
+    "nearest_beach_name": "Cala de la Llobella"
+  },
+  "110786210": {
+    "nearest_beach_km": 1.7,
+    "nearest_beach_name": "Playa del Puerto"
+  },
+  "110786212": {
+    "nearest_beach_km": 11.1,
+    "nearest_beach_name": "Beach"
+  },
+  "110786353": {
+    "nearest_beach_km": 1.6,
+    "nearest_beach_name": "Playa Villananitos"
+  },
+  "110786409": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Playa del Puerto"
+  },
+  "110786411": {
+    "nearest_beach_km": 2.7,
+    "nearest_beach_name": "Playa de El Pescador"
+  },
+  "110786463": {
+    "nearest_beach_km": 2.6,
+    "nearest_beach_name": "Beach"
+  },
+  "110786474": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Playa Villananitos"
+  },
+  "110786498": {
+    "nearest_beach_km": 0.8,
+    "nearest_beach_name": "Playa de La Mata"
+  },
+  "110786537": {
+    "nearest_beach_km": 0.0,
+    "nearest_beach_name": "Beach"
+  },
+  "110786647": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Playa Villananitos"
+  },
+  "110786736": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Playa Las Charcas"
+  },
+  "110786823": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Playa de las Villas"
+  },
+  "110786858": {
+    "nearest_beach_km": 1.0,
+    "nearest_beach_name": "Beach"
+  },
+  "110786899": {
+    "nearest_beach_km": 1.8,
+    "nearest_beach_name": "Playa de las Villas"
+  },
+  "110787148": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Playa Punta Prima"
+  },
+  "110787530": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Playa Villananitos"
+  },
+  "110787713": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110788055": {
+    "nearest_beach_km": 0.9,
+    "nearest_beach_name": "Playa Vistamar"
+  },
+  "110791771": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Beach"
+  },
+  "110791791": {
+    "nearest_beach_km": 11.9,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "110794176": {
+    "nearest_beach_km": 2.3,
+    "nearest_beach_name": "Playa Cala La Mosca"
+  },
+  "110794318": {
+    "nearest_beach_km": 11.6,
+    "nearest_beach_name": "Platja del Camp"
+  },
+  "110794514": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Playa Vistamar"
+  },
+  "110794786": {
+    "nearest_beach_km": 5.5,
+    "nearest_beach_name": "Platja de La Roqueta"
+  },
+  "110795309": {
+    "nearest_beach_km": 6.7,
+    "nearest_beach_name": "Platja del Postiguet"
+  },
+  "110796199": {
+    "nearest_beach_km": 3.0,
+    "nearest_beach_name": "Beach"
+  },
+  "110799159": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Platja del Cabanyal"
+  },
+  "110800547": {
+    "nearest_beach_km": 8.7,
+    "nearest_beach_name": "Beach"
+  },
+  "110821456": {
+    "nearest_beach_km": 5.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110821725": {
+    "nearest_beach_km": 5.5,
+    "nearest_beach_name": "Playa La Losa"
+  },
+  "110826644": {
+    "nearest_beach_km": 16.2,
+    "nearest_beach_name": "Platja de la Devesa"
+  },
+  "110828740": {
+    "nearest_beach_km": 1.4,
+    "nearest_beach_name": "Playa El Castillico"
+  },
+  "110833720": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "110837452": {
+    "nearest_beach_km": 7.9,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "110837594": {
+    "nearest_beach_km": 5.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110867461": {
+    "nearest_beach_km": 8.1,
+    "nearest_beach_name": "Platja de Surrac"
+  },
+  "110885934": {
+    "nearest_beach_km": 0.4,
+    "nearest_beach_name": "Platja Naturista de Moncofa"
+  },
+  "110892512": {
+    "nearest_beach_km": 0.3,
+    "nearest_beach_name": "Playa del Hornillo"
+  },
+  "110896419": {
+    "nearest_beach_km": 17.9,
+    "nearest_beach_name": "Beach"
+  },
+  "110902568": {
+    "nearest_beach_km": 1.5,
+    "nearest_beach_name": "Platja de Torre de la Sal"
+  },
+  "110905760": {
+    "nearest_beach_km": 3.2,
+    "nearest_beach_name": "Platja de les Cases"
+  },
+  "110906886": {
+    "nearest_beach_km": 1.1,
+    "nearest_beach_name": "Beach"
+  },
+  "110963824": {
+    "nearest_beach_km": 2.0,
+    "nearest_beach_name": "Beach"
+  },
+  "110966037": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "111004557": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Beach"
+  },
+  "111004703": {
+    "nearest_beach_km": 0.7,
+    "nearest_beach_name": "Beach"
+  },
+  "111005619": {
+    "nearest_beach_km": 5.5,
+    "nearest_beach_name": "Platja de Benafel\u00ed"
+  },
+  "111014470": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "111015586": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "111019971": {
+    "nearest_beach_km": 9.5,
+    "nearest_beach_name": "Platja del Serradal"
+  },
+  "111038825": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  }
+}
