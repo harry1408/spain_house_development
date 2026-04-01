@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import pandas as pd
 import re, math, json, glob, os, io
+import urllib.request
 from typing import Optional, List
 
 app = FastAPI(title="Housing Dashboard API")
@@ -144,6 +145,27 @@ def _extract_stated_units(description: str):
                 return n
     return None
 
+_STRIP_LINES = [
+    "This comment was automatically translated and may not be 100% accurate.",
+    "See description in the original language",
+]
+_DESC_COLS = ["description","property_description","descripcion","desc","comments"]
+
+def _clean_description(text):
+    """Strip disclaimer lines and return cleaned description or None."""
+    if not text or not isinstance(text, str) or text.strip().lower() in ("nan","none",""):
+        return None
+    lines = [l for l in text.splitlines() if not any(s.lower() in l.lower() for s in _STRIP_LINES)]
+    result = " ".join(l.strip() for l in lines if l.strip())
+    return result if result else None
+
+def _first_desc(row, columns):
+    """Get first non-null description from a row, cleaned."""
+    for c in _DESC_COLS:
+        if c in columns and pd.notna(row.get(c)):
+            return _clean_description(str(row[c]))
+    return None
+
 def _year(s):
     if pd.isna(s): return None
     m = re.search(r"(\d{4})", str(s))
@@ -253,6 +275,19 @@ def get_data_sources():
         sources.append({"file": name, "province": province_name})
     return safe_json({"sources": sources, "total_rows": len(df), "provinces": sorted(df["province"].dropna().unique().tolist())})
 
+
+@app.get("/resolve-url")
+def resolve_url(url: str):
+    """Follow redirects on shortened Google Maps links (goo.gl, maps.app.goo.gl) and return the final URL."""
+    allowed = ("google.com/maps", "maps.google.com", "goo.gl", "maps.app.goo.gl")
+    if not any(h in url for h in allowed):
+        return JSONResponse({"error": "Only Google Maps URLs are supported"}, status_code=400)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return {"resolved": resp.url}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/filters")
 def get_filters():
@@ -476,7 +511,7 @@ def drilldown_municipality(municipality: str):
         dl = dl.copy()
         dl["_is_tourist"] = False
 
-    listings_grp = dl.groupby(["listing_id","property_name","developer","delivery_date","esg_grade"], dropna=False).agg(
+    _dd_agg = dict(
         units        =("sub_listing_id","nunique"),
         min_price    =("price","min"), max_price=("price","max"),
         avg_price    =("price","mean"), avg_price_m2=("price_per_m2","mean"),
@@ -486,7 +521,18 @@ def drilldown_municipality(municipality: str):
         has_pool=("has_pool","max"), has_parking=("has_parking","max"),
         has_terrace=("has_terrace","max"), has_lift=("has_lift","max"),
         is_tourist   =("_is_tourist","max"),
-    ).reset_index()
+    )
+    _dd_desc_col = next((c for c in _DESC_COLS if c in dl.columns), None)
+    if _dd_desc_col:
+        _dd_agg["_desc_raw"] = (_dd_desc_col, "first")
+    listings_grp = dl.groupby(["listing_id","property_name","developer","delivery_date","esg_grade"], dropna=False).agg(**_dd_agg).reset_index()
+    _dd_cols = dl.columns.tolist()
+    if "_desc_raw" in listings_grp.columns:
+        listings_grp["stated_total_units"] = listings_grp["_desc_raw"].apply(
+            lambda v: _extract_stated_units(str(v)) if pd.notna(v) else None)
+        listings_grp = listings_grp.drop(columns=["_desc_raw"])
+    else:
+        listings_grp["stated_total_units"] = None
     for c in ["avg_price","min_price","max_price"]:
         listings_grp[c] = listings_grp[c].round(0)
     listings_grp["avg_price_m2"] = listings_grp["avg_price_m2"].round(1)
@@ -544,10 +590,37 @@ def drilldown_municipality(municipality: str):
     trend["avg_price"]    = trend["avg_price"].round(0)
     trend["avg_price_m2"] = trend["avg_price_m2"].round(1)
 
-    return safe_json({"listings": listings_grp.to_dict(orient="records"),
+    # House type stats (unit-level, same structure as unit_type_stats)
+    if "house_type" in dl.columns:
+        ht_stats = dl[dl["house_type"].notna() & (dl["house_type"] != "")].groupby("house_type").agg(
+            count     =("sub_listing_id","nunique"),
+            min_price =("price","min"),
+            avg_price =("price","mean"),
+            max_price =("price","max"),
+            avg_size  =("size","mean"),
+            avg_pm2   =("price_per_m2","mean"),
+        ).reset_index()
+        for c in ["min_price","avg_price","max_price"]:
+            ht_stats[c] = ht_stats[c].round(0)
+        ht_stats["avg_size"] = ht_stats["avg_size"].round(1)
+        ht_stats["avg_pm2"]  = ht_stats["avg_pm2"].round(0)
+        ht_stats = ht_stats.sort_values("count", ascending=False)
+    else:
+        ht_stats = pd.DataFrame()
+
+    listings_records = listings_grp.to_dict(orient="records")
+    for rec in listings_records:
+        lid = int(rec["listing_id"])
+        _lat, _lng, _ = _listing_coords(lid, municipality)
+        rec["lat"] = _lat
+        rec["lng"] = _lng
+        rec["nearest_beach_km"], rec["nearest_beach_name"] = _nearest_beach(lid)
+
+    return safe_json({"listings": listings_records,
                       "stats": stats,
                       "unit_type_mix": mix.to_dict(orient="records"),
                       "unit_type_stats": ut_stats.to_dict(orient="records"),
+                      "house_type_stats": ht_stats.to_dict(orient="records"),
                       "price_dist": price_dist.to_dict(orient="records"),
                       "m2_dist": m2_dist.to_dict(orient="records"),
                       "trend": trend.drop("period_ord",axis=1).to_dict(orient="records")})
@@ -637,6 +710,8 @@ def drilldown_listing(listing_id: int):
         "description":   next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None),
         "is_tourist":    any(bool(str(meta.get(c,"")).lower().find("tourist apartment") >= 0) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))),
         "stated_total_units": _extract_stated_units(next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None)),
+        "nearest_beach_km":   (_nb := _nearest_beach(listing_id))[0],
+        "nearest_beach_name": _nb[1],
         "total_units":   int(len(dl)),
         "periods":       PERIODS_SORTED,
         "apartments":    apt_records,
@@ -823,6 +898,8 @@ for _d in [df]:
 @app.get("/map/listings")
 def map_listings(municipality: Optional[List[str]] = Query(None)):
     d = _latest_df()
+    if municipality:
+        d = d[d["municipality"].isin(municipality)]
     grp = d.groupby(["listing_id","property_name","municipality","city_area","comarca"], dropna=False).agg(
         units      = ("sub_listing_id","nunique"),
         avg_price  = ("price","mean"),
@@ -856,6 +933,26 @@ def _haversine_km(lat1, lng1, lat2, lng2):
     dlng = _math.radians(lng2 - lng1)
     a = _math.sin(dlat/2)**2 + _math.cos(_math.radians(lat1)) * _math.cos(_math.radians(lat2)) * _math.sin(dlng/2)**2
     return R * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1-a))
+
+# ══════════════════════════════════════════════════════════════════════════
+#  BEACH DISTANCES  — pre-computed by precompute_beaches.py, loaded at startup
+# ══════════════════════════════════════════════════════════════════════════
+_BEACH_DIST_FILE = os.path.join(os.path.dirname(__file__), "beach_distances.json")
+_BEACH_DISTANCES: dict = {}
+if os.path.exists(_BEACH_DIST_FILE):
+    try:
+        with open(_BEACH_DIST_FILE) as _f:
+            _BEACH_DISTANCES = {int(k): v for k, v in json.load(_f).items()}
+        print(f"Loaded beach distances for {len(_BEACH_DISTANCES)} listings")
+    except Exception as _e:
+        print(f"Could not load beach_distances.json: {_e}")
+
+def _nearest_beach(listing_id):
+    """Return (distance_km, beach_name) from pre-computed file, or (None, None)."""
+    rec = _BEACH_DISTANCES.get(int(listing_id) if listing_id else -1)
+    if rec:
+        return rec.get("nearest_beach_km"), rec.get("nearest_beach_name")
+    return None, None
 
 # ══════════════════════════════════════════════════════════════════════════
 #  NEARBY COMPARISON  — same comarca, different listings
@@ -1498,6 +1595,9 @@ def search_listings(
     )
     if "esg_certificate" in d.columns:
         _agg["esg_certificate"] = ("esg_certificate","first")
+    _desc_col_s = next((c for c in _DESC_COLS if c in d.columns), None)
+    if _desc_col_s:
+        _agg["_desc_raw"] = (_desc_col_s, "first")
     grp = d.groupby("listing_id").agg(**_agg).reset_index()
     grp["avg_price"]    = grp["avg_price"].round(0)
     grp["avg_price_m2"] = grp["avg_price_m2"].round(1)
@@ -1509,8 +1609,10 @@ def search_listings(
     for _, r in grp.iterrows():
         lid = int(r["listing_id"])
         lat_v, lng_v, _ = _listing_coords(lid, r["municipality"])
-        row = {**{k: _clean(v) for k, v in r.items()}, "lat": lat_v, "lng": lng_v}
+        row = {**{k: _clean(v) for k, v in r.items() if k != "_desc_raw"}, "lat": lat_v, "lng": lng_v}
         row["esg_grade"] = _parse_esg_grade(r.get("esg_certificate", ""))
+        row["stated_total_units"] = _extract_stated_units(str(r["_desc_raw"])) if "_desc_raw" in r.index and pd.notna(r.get("_desc_raw")) else None
+        row["nearest_beach_km"], row["nearest_beach_name"] = _nearest_beach(lid)
         rows.append(row)
 
     # Radius filter — compute centroid from all rows that have real coords
