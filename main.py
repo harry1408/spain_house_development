@@ -1165,45 +1165,83 @@ def _classify_images_parallel(urls: list) -> dict:
 def listing_photos(listing_id: int):
     import re as _re, ast as _ast
     rows = df[df["listing_id"] == listing_id]
-    if rows.empty or "images" not in rows.columns:
+    if rows.empty:
         return safe_json({"photos": []})
 
-    _FLOORPLAN_RE = _re.compile(r'plano|planta|floor[_\-]plan|blueprint|fp_', _re.IGNORECASE)
+    _FLOORPLAN_RE    = _re.compile(r'plano|planta|floor[_\-]plan|blueprint|fp_', _re.IGNORECASE)
+    _FLOORPLAN_TITLE = _re.compile(r'floor.?plan|plano|planta|blueprint', _re.IGNORECASE)
 
-    seen, all_urls = set(), []
-    for raw in rows["images"].dropna():
+    seen = set()
+    # url -> True (floor plan) / False (photo) / None (unknown — needs pixel analysis)
+    url_classification = {}
+
+    # ── Try images_dic first (has url + title) ────────────────────────────
+    has_images_dic = "images_dic" in rows.columns
+    for raw in (rows["images_dic"].dropna() if has_images_dic else []):
         s = str(raw).strip()
-        if not s or s == "0":
+        if not s or s in ("0", "nan", "[]"):
             continue
-        urls = []
         try:
             parsed = _ast.literal_eval(s)
-            if isinstance(parsed, list):
-                urls = [str(u).strip() for u in parsed]
         except Exception:
-            urls = [u.strip().strip("'").strip('"') for u in s.strip("[]").split(",")]
-
-        for url in urls:
+            parsed = []
+        if not isinstance(parsed, list):
+            continue
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+            url   = str(item.get("url", "")).strip()
+            title = str(item.get("title", "")).strip()
             if not url.startswith("http"):
                 continue
-            m = _re.search(r'/([a-f0-9]+)\.(webp|jpg)$', url)
+            m   = _re.search(r'/([a-f0-9]+)\.(webp|jpg)$', url)
             key = m.group(1) if m else url
             if key in seen:
                 continue
             seen.add(key)
-            all_urls.append(url)
+            if title:
+                # Title present — use it definitively
+                url_classification[url] = bool(_FLOORPLAN_TITLE.search(title))
+            else:
+                # Title absent — mark for pixel fallback
+                url_classification[url] = None
 
-    # Step 1: URL-keyword split (fast, no download needed)
-    fp_by_url  = [u for u in all_urls if     _FLOORPLAN_RE.search(u)]
-    ph_by_url  = [u for u in all_urls if not _FLOORPLAN_RE.search(u)]
+    # ── Fallback: plain images column for URLs not already seen ──────────
+    if "images" in rows.columns:
+        for raw in rows["images"].dropna():
+            s = str(raw).strip()
+            if not s or s == "0":
+                continue
+            urls = []
+            try:
+                parsed = _ast.literal_eval(s)
+                if isinstance(parsed, list):
+                    urls = [str(u).strip() for u in parsed]
+            except Exception:
+                urls = [u.strip().strip("'").strip('"') for u in s.strip("[]").split(",")]
+            for url in urls:
+                if not url.startswith("http"):
+                    continue
+                m   = _re.search(r'/([a-f0-9]+)\.(webp|jpg)$', url)
+                key = m.group(1) if m else url
+                if key in seen:
+                    continue
+                seen.add(key)
+                url_classification[url] = None  # needs classification
 
-    # Step 2: For the remaining "photos", run pixel analysis to catch
-    #         floor-plan images whose URLs have no keywords
-    classifications = _classify_images_parallel(ph_by_url)
-    photos      = [u for u in ph_by_url if not classifications.get(u, False)]
-    fp_by_pixel = [u for u in ph_by_url if     classifications.get(u, False)]
+    # ── Classify URLs with no title: URL keyword then pixel analysis ──────
+    needs_classify = [u for u, v in url_classification.items() if v is None]
+    fp_by_url_kw   = [u for u in needs_classify if     _FLOORPLAN_RE.search(u)]
+    needs_pixel    = [u for u in needs_classify if not _FLOORPLAN_RE.search(u)]
 
-    floor_plans = fp_by_url + fp_by_pixel
+    for u in fp_by_url_kw:
+        url_classification[u] = True
+    pixel_results = _classify_images_parallel(needs_pixel)
+    for u in needs_pixel:
+        url_classification[u] = pixel_results.get(u, False)
+
+    photos      = [u for u, is_fp in url_classification.items() if not is_fp]
+    floor_plans = [u for u, is_fp in url_classification.items() if is_fp]
     return safe_json({"photos": photos, "floor_plans": floor_plans})
 
 # ── Search page endpoints ─────────────────────────────────────────────────
