@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import pandas as pd
 import re, math, json, glob, os, io
-import urllib.request
 from typing import Optional, List
 
 app = FastAPI(title="Housing Dashboard API")
@@ -275,19 +274,6 @@ def get_data_sources():
         sources.append({"file": name, "province": province_name})
     return safe_json({"sources": sources, "total_rows": len(df), "provinces": sorted(df["province"].dropna().unique().tolist())})
 
-
-@app.get("/resolve-url")
-def resolve_url(url: str):
-    """Follow redirects on shortened Google Maps links (goo.gl, maps.app.goo.gl) and return the final URL."""
-    allowed = ("google.com/maps", "maps.google.com", "goo.gl", "maps.app.goo.gl")
-    if not any(h in url for h in allowed):
-        return JSONResponse({"error": "Only Google Maps URLs are supported"}, status_code=400)
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            return {"resolved": resp.url}
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/filters")
 def get_filters():
@@ -614,7 +600,7 @@ def drilldown_municipality(municipality: str):
         _lat, _lng, _ = _listing_coords(lid, municipality)
         rec["lat"] = _lat
         rec["lng"] = _lng
-        rec["nearest_beach_km"], rec["nearest_beach_name"] = _nearest_beach(lid)
+        rec["nearest_beach_km"], rec["nearest_beach_name"] = _nearest_beach(lid, _lat, _lng)
 
     return safe_json({"listings": listings_records,
                       "stats": stats,
@@ -710,7 +696,7 @@ def drilldown_listing(listing_id: int):
         "description":   next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None),
         "is_tourist":    any(bool(str(meta.get(c,"")).lower().find("tourist apartment") >= 0) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))),
         "stated_total_units": _extract_stated_units(next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None)),
-        "nearest_beach_km":   (_nb := _nearest_beach(listing_id))[0],
+        "nearest_beach_km":   (_nb := _nearest_beach(listing_id, lat, lng))[0],
         "nearest_beach_name": _nb[1],
         "total_units":   int(len(dl)),
         "periods":       PERIODS_SORTED,
@@ -947,8 +933,8 @@ if os.path.exists(_BEACH_DIST_FILE):
     except Exception as _e:
         print(f"Could not load beach_distances.json: {_e}")
 
-def _nearest_beach(listing_id):
-    """Return (distance_km, beach_name) from pre-computed file, or (None, None)."""
+def _nearest_beach(listing_id, *args, **kwargs):
+    """Return (distance_km, beach_name) from pre-computed beach_distances.json."""
     rec = _BEACH_DISTANCES.get(int(listing_id) if listing_id else -1)
     if rec:
         return rec.get("nearest_beach_km"), rec.get("nearest_beach_name")
@@ -1612,7 +1598,7 @@ def search_listings(
         row = {**{k: _clean(v) for k, v in r.items() if k != "_desc_raw"}, "lat": lat_v, "lng": lng_v}
         row["esg_grade"] = _parse_esg_grade(r.get("esg_certificate", ""))
         row["stated_total_units"] = _extract_stated_units(str(r["_desc_raw"])) if "_desc_raw" in r.index and pd.notna(r.get("_desc_raw")) else None
-        row["nearest_beach_km"], row["nearest_beach_name"] = _nearest_beach(lid)
+        row["nearest_beach_km"], row["nearest_beach_name"] = _nearest_beach(lid, lat_v, lng_v)
         rows.append(row)
 
     # Radius filter — compute centroid from all rows that have real coords

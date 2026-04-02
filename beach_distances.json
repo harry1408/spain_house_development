@@ -147,10 +147,6 @@
     "nearest_beach_km": 8.0,
     "nearest_beach_name": "Platja de Port Saplaya"
   },
-  "97474957": {
-    "nearest_beach_km": 2.9,
-    "nearest_beach_name": "Cala de Finestrat"
-  },
   "97701601": {
     "nearest_beach_km": 1.7,
     "nearest_beach_name": "Beach"
@@ -926,10 +922,6 @@
   "106057306": {
     "nearest_beach_km": 2.9,
     "nearest_beach_name": "Platja de l'Horta-Mutxavista"
-  },
-  "106083465": {
-    "nearest_beach_km": null,
-    "nearest_beach_name": null
   },
   "106085798": {
     "nearest_beach_km": 2.9,
@@ -1754,10 +1746,6 @@
   "108495643": {
     "nearest_beach_km": 4.0,
     "nearest_beach_name": "Platja de Daim\u00fas"
-  },
-  "108503812": {
-    "nearest_beach_km": 7.9,
-    "nearest_beach_name": "Platja de La Roqueta"
   },
   "108505011": {
     "nearest_beach_km": 11.4,
@@ -2958,10 +2946,6 @@
   "109782125": {
     "nearest_beach_km": 4.5,
     "nearest_beach_name": "el Torres"
-  },
-  "109785850": {
-    "nearest_beach_km": 2.6,
-    "nearest_beach_name": "Cala de Finestrat"
   },
   "109788652": {
     "nearest_beach_km": 8.8,
@@ -4722,5 +4706,185 @@
   "111038825": {
     "nearest_beach_km": null,
     "nearest_beach_name": null
+  },
+  "111057731": {
+    "nearest_beach_km": null,
+    "nearest_beach_name": null
+  },
+  "98202938": {
+    "nearest_beach_km": 8.3,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "100814741": {
+    "nearest_beach_km": 8.4,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "101107895": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "104649013": {
+    "nearest_beach_km": 9.2,
+    "nearest_beach_name": "Beach"
+  },
+  "104746893": {
+    "nearest_beach_km": 3.1,
+    "nearest_beach_name": "Beach"
+  },
+  "105501666": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Beach"
+  },
+  "106034746": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "106696069": {
+    "nearest_beach_km": 5.7,
+    "nearest_beach_name": "Beach"
+  },
+  "106751368": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "107737492": {
+    "nearest_beach_km": 4.9,
+    "nearest_beach_name": "Beach"
+  },
+  "107807646": {
+    "nearest_beach_km": 4.0,
+    "nearest_beach_name": "Beach"
+  },
+  "107939705": {
+    "nearest_beach_km": 10.9,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "108009345": {
+    "nearest_beach_km": 6.5,
+    "nearest_beach_name": "Platja de Massalfassar"
+  },
+  "108102010": {
+    "nearest_beach_km": 4.4,
+    "nearest_beach_name": "Platja de Massalfassar"
+  },
+  "108102037": {
+    "nearest_beach_km": 8.9,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "108588654": {
+    "nearest_beach_km": 7.5,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "108775045": {
+    "nearest_beach_km": 7.8,
+    "nearest_beach_name": "Platja de Foios"
+  },
+  "108959235": {
+    "nearest_beach_km": 5.8,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "109285440": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "109446839": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "109515188": {
+    "nearest_beach_km": 11.0,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "109537617": {
+    "nearest_beach_km": 8.9,
+    "nearest_beach_name": "Platja de Port Saplaya"
+  },
+  "109538921": {
+    "nearest_beach_km": 11.9,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "109585063": {
+    "nearest_beach_km": 11.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109592902": {
+    "nearest_beach_km": 11.0,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "109621948": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "109622125": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "109750902": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "109801112": {
+    "nearest_beach_km": 7.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109829008": {
+    "nearest_beach_km": 5.7,
+    "nearest_beach_name": "Beach"
+  },
+  "109856675": {
+    "nearest_beach_km": 7.5,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "109863037": {
+    "nearest_beach_km": 7.6,
+    "nearest_beach_name": "Beach"
+  },
+  "109911492": {
+    "nearest_beach_km": 16.2,
+    "nearest_beach_name": "Playa Fluvial de Bugarra"
+  },
+  "109971871": {
+    "nearest_beach_km": 7.8,
+    "nearest_beach_name": "Platja del Saler"
+  },
+  "110055161": {
+    "nearest_beach_km": 7.5,
+    "nearest_beach_name": "Platja dels Peixets"
+  },
+  "110095246": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "110150868": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "110153102": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de Pinedo"
+  },
+  "110211462": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "110267546": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "110451937": {
+    "nearest_beach_km": 6.0,
+    "nearest_beach_name": "Platja de l'Arbre del Gos"
+  },
+  "110495253": {
+    "nearest_beach_km": 8.9,
+    "nearest_beach_name": "Platja de la Creu"
+  },
+  "110577498": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
+  },
+  "110681405": {
+    "nearest_beach_km": 5.0,
+    "nearest_beach_name": "Platja de la Malva-rosa"
   }
 }
