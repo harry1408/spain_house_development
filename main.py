@@ -2,7 +2,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import pandas as pd
-import re, math, json, glob, os, io
+import re, math, json, glob, os, io, urllib.request
 from typing import Optional, List
 
 app = FastAPI(title="Housing Dashboard API")
@@ -1960,3 +1960,16 @@ def export_by_filter(
     class _FakeQuery:
         pass
     return export_listings_excel(ids=ids_str)
+
+
+@app.get("/resolve-url")
+def resolve_url(url: str):
+    """Follow redirects on a short URL (e.g. goo.gl/maps/...) and return the final URL."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler())
+        with opener.open(req, timeout=8) as resp:
+            final_url = resp.geturl()
+        return {"url": final_url}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
