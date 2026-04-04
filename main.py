@@ -245,7 +245,7 @@ def _get_property_class(row):
 for _d in [df, _full]:
     _d["property_class"] = _d.apply(_get_property_class, axis=1)
 
-def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None, province=None, df_src=None):
+def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None, province=None, df_src=None, house_type=None):
     base = df_src if df_src is not None else df
     # When no period specified, use per-province latest (so all provinces show even if not in sync)
     if period:
@@ -257,6 +257,8 @@ def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None,
     if unit_type:    d = d[d["unit_type"].isin(unit_type)]
     if year:         d = d[d["delivery_year"].isin([int(y) for y in year])]
     if esg:          d = d[d["esg_grade"].isin(esg)]
+    if house_type and "house_type" in d.columns:
+        d = d[d["house_type"].isin(house_type)]
     return d
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -289,10 +291,12 @@ def get_filters():
     for p in province_munis:
         province_munis[p] = sorted(province_munis[p])
 
+    house_types = sorted([h for h in df["house_type"].dropna().unique().tolist() if h]) if "house_type" in df.columns else []
     return {"municipalities": sorted(df["municipality"].dropna().unique().tolist()),
             "provinces":      sorted(df["province"].dropna().unique().tolist()),
             "province_munis": province_munis,
             "unit_types":     sorted(df["unit_type"].dropna().unique().tolist()),
+            "house_types":    house_types,
             "delivery_years": sorted([int(y) for y in df["delivery_year"].dropna().unique()]),
             "esg_grades":     sorted(df["esg_grade"].dropna().unique().tolist()),
             "periods":        PERIODS_SORTED,
@@ -308,9 +312,10 @@ def get_stats(municipality: Optional[List[str]] = Query(None),
               unit_type:    Optional[List[str]] = Query(None),
               year:         Optional[List[str]] = Query(None),
               esg:          Optional[List[str]] = Query(None),
-              period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period, province)
-    p = _filter(municipality, unit_type, year, esg, [PREV_PERIOD], province) if PREV_PERIOD else None
+              period:       Optional[List[str]] = Query(None),
+              house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
+    p = _filter(municipality, unit_type, year, esg, [PREV_PERIOD], province, house_type=house_type) if PREV_PERIOD else None
     def _s(d): return {"total_units": len(d),
                        "avg_price":    round(float(d["price"].mean()))   if len(d) else 0,
                        "avg_price_m2": round(float(d["price_per_m2"].mean()),1) if len(d) else 0,
@@ -318,6 +323,7 @@ def get_stats(municipality: Optional[List[str]] = Query(None),
                        "total_developments": int(d["listing_id"].nunique())}
     cur = _s(d)
     cur["prev"] = _s(p) if p is not None else None
+    cur["prev_period"] = PREV_PERIOD
     return cur
 
 @app.get("/charts/price-by-unit-type")
@@ -326,8 +332,9 @@ def price_by_unit_type(municipality: Optional[List[str]] = Query(None),
                        unit_type:    Optional[List[str]] = Query(None),
                        year:         Optional[List[str]] = Query(None),
                        esg:          Optional[List[str]] = Query(None),
-                       period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period, province)
+                       period:       Optional[List[str]] = Query(None),
+                       house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
     r = d.groupby("unit_type").agg(avg_price=("price","mean"), count=("price","count"), avg_size=("size","mean"), avg_price_m2=("price_per_m2","mean")).reset_index()
     r["avg_price"] = r["avg_price"].round(0); r["avg_size"] = r["avg_size"].round(1); r["avg_price_m2"] = r["avg_price_m2"].round(0)
     order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
@@ -340,8 +347,9 @@ def delivery_timeline(municipality: Optional[List[str]] = Query(None),
                       unit_type:    Optional[List[str]] = Query(None),
                       year:         Optional[List[str]] = Query(None),
                       esg:          Optional[List[str]] = Query(None),
-                      period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period, province).dropna(subset=["delivery_quarter"])
+                      period:       Optional[List[str]] = Query(None),
+                      house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type).dropna(subset=["delivery_quarter"])
     r = d.groupby("delivery_quarter").agg(count=("price","count"), avg_price=("price","mean")).reset_index()
     r["avg_price"] = r["avg_price"].round(0)
     return safe_json(r.sort_values("delivery_quarter").to_dict(orient="records"))
@@ -352,8 +360,9 @@ def price_distribution(municipality: Optional[List[str]] = Query(None),
                        unit_type:    Optional[List[str]] = Query(None),
                        year:         Optional[List[str]] = Query(None),
                        esg:          Optional[List[str]] = Query(None),
-                       period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period, province)
+                       period:       Optional[List[str]] = Query(None),
+                       house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
     bins   = [0,150000,200000,250000,300000,400000,500000,700000,10000000]
     labels = ["<150k","150-200k","200-250k","250-300k","300-400k","400-500k","500-700k",">700k"]
     d2 = d.copy(); d2["bin"] = pd.cut(d2["price"], bins=bins, labels=labels)
@@ -371,8 +380,9 @@ def municipality_overview(municipality: Optional[List[str]] = Query(None),
                           unit_type:    Optional[List[str]] = Query(None),
                           year:         Optional[List[str]] = Query(None),
                           esg:          Optional[List[str]] = Query(None),
-                          period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period, province)
+                          period:       Optional[List[str]] = Query(None),
+                          house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
     r = d.groupby("municipality").agg(units=("price","count"), listings=("listing_id","nunique"),
                                       avg_price=("price","mean"), avg_price_m2=("price_per_m2","mean")).reset_index()
     r["avg_price"]    = r["avg_price"].round(0)
@@ -385,12 +395,30 @@ def esg_breakdown(municipality: Optional[List[str]] = Query(None),
                   unit_type:    Optional[List[str]] = Query(None),
                   year:         Optional[List[str]] = Query(None),
                   esg:          Optional[List[str]] = Query(None),
-                  period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period, province)
+                  period:       Optional[List[str]] = Query(None),
+                  house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
     r = d.groupby("esg_grade", dropna=False).agg(count=("price","count"), avg_price=("price","mean")).reset_index()
     r["esg_grade"] = r["esg_grade"].fillna("Unknown")
     r["avg_price"] = r["avg_price"].round(0)
     return safe_json(r.to_dict(orient="records"))
+
+@app.get("/charts/unit-by-house-type")
+def unit_by_house_type(municipality: Optional[List[str]] = Query(None),
+                       province:     Optional[List[str]] = Query(None),
+                       unit_type:    Optional[List[str]] = Query(None),
+                       year:         Optional[List[str]] = Query(None),
+                       esg:          Optional[List[str]] = Query(None),
+                       period:       Optional[List[str]] = Query(None),
+                       house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
+    if "house_type" not in d.columns or "unit_type" not in d.columns:
+        return safe_json([])
+    d2 = d[d["house_type"].notna() & (d["house_type"] != "") &
+           d["unit_type"].notna()  & (d["unit_type"]  != "")]
+    counts = d2.groupby(["house_type","unit_type"])["sub_listing_id"].nunique().reset_index()
+    counts.columns = ["house_type","unit_type","count"]
+    return safe_json(counts.to_dict(orient="records"))
 
 @app.get("/charts/size-vs-price")
 def size_vs_price(municipality: Optional[List[str]] = Query(None),
@@ -398,10 +426,11 @@ def size_vs_price(municipality: Optional[List[str]] = Query(None),
                   unit_type:    Optional[List[str]] = Query(None),
                   year:         Optional[List[str]] = Query(None),
                   esg:          Optional[List[str]] = Query(None),
-                  period:       Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period, province)
+                  period:       Optional[List[str]] = Query(None),
+                  house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
     cols = ["sub_listing_id","listing_id","size","price","price_per_m2",
-            "unit_type","municipality","city_area","property_name","floor",
+            "unit_type","house_type","municipality","city_area","property_name","floor",
             "bedrooms","unit_url"]
     d2 = d[[c for c in cols if c in d.columns]].dropna(subset=["size","price"])
     if len(d2) > 800: d2 = d2.sample(800, random_state=42)
