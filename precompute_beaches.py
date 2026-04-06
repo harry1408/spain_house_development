@@ -25,7 +25,7 @@ _DATA_DIR = os.path.join(_DIR, "data")
 _OUT_FILE = os.path.join(_DIR, "beach_distances.json")
 _MAX_KM   = 20
 
-# ── Municipality fallback coords (mirrors main.py MUNI_COORDS exactly) ────────
+# ── Municipality fallback coords (mirrors main.py MUNI_COORDS exactlfy) ────────
 MUNI_COORDS = {
     "Aiora, Valencia":(38.93,-0.97),"Alaquás":(39.46,-0.46),"Albal":(39.38,-0.43),
     "Albalat Dels Sorells":(39.55,-0.37),"Alberic":(39.12,-0.52),"Alcàsser":(39.40,-0.44),
