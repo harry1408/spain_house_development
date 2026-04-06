@@ -95,7 +95,8 @@ _full = _raw.copy()
 df = _raw.drop_duplicates(subset=["sub_listing_id","period"]).copy()
 
 PERIODS_SORTED = sorted(df["period"].unique(), key=lambda p: df[df["period"]==p]["period_ord"].iloc[0])
-LATEST_PERIOD  = PERIODS_SORTED[-1]
+LATEST_PERIOD  = "Apr 2026"   # Display label override — actual data period is PERIODS_SORTED[-1]
+_LATEST_DATA_PERIOD = PERIODS_SORTED[-1]   # Used for data queries
 PREV_PERIOD    = PERIODS_SORTED[-2] if len(PERIODS_SORTED) > 1 else None
 
 # Per-province latest period (provinces may have different update cadences)
@@ -1126,6 +1127,7 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
         has_parking  =("has_parking","max"),
         has_terrace  =("has_terrace","max"),
         has_lift     =("has_lift","max"),
+        last_period  =("period","max"),
     ).reset_index()
     for c in ["avg_price","min_price","max_price"]:
         grp[c] = grp[c].round(0)
@@ -1178,11 +1180,17 @@ def delisted_apartments(listing_id: int):
     records = [{k:(None if str(v)=="<NA>" else v) for k,v in r.items()} for r in records]
 
     meta = dp.iloc[0]
+    lat, lng, _ = _listing_coords(listing_id, str(meta["municipality"]))
     return safe_json({
         "property_name": str(meta["property_name"]),
         "municipality":  str(meta["municipality"]),
         "developer":     str(meta["developer"]) if pd.notna(meta.get("developer")) else None,
         "last_period":   str(dp.iloc[0]["period"]) if not dp.empty else PREV_PERIOD,
+        "city_area":     str(meta["city_area"]) if pd.notna(meta.get("city_area")) else None,
+        "esg_grade":     str(meta["esg_grade"]) if pd.notna(meta.get("esg_grade")) else None,
+        "description":   str(meta["description"]) if pd.notna(meta.get("description")) else None,
+        "lat":           lat,
+        "lng":           lng,
         "apartments":    records,
     })
 
