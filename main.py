@@ -126,6 +126,11 @@ LATEST_PERIOD  = "Apr 2026"   # Display label override — actual data period is
 _LATEST_DATA_PERIOD = PERIODS_SORTED[-1]   # Used for data queries
 PREV_PERIOD    = PERIODS_SORTED[-2] if len(PERIODS_SORTED) > 1 else None
 
+# Listing IDs new in the latest period (not present in any prior period)
+_latest_listing_ids = set(df[df["period"] == _LATEST_DATA_PERIOD]["listing_id"].unique()) if _LATEST_DATA_PERIOD else set()
+_prev_listing_ids   = set(df[df["period"] != _LATEST_DATA_PERIOD]["listing_id"].unique()) if _LATEST_DATA_PERIOD else set()
+_new_this_month_ids = list(int(x) for x in (_latest_listing_ids - _prev_listing_ids))
+
 # Per-province latest period (provinces may have different update cadences)
 _prov_latest = (
     df.groupby("province")["period_ord"]
@@ -343,9 +348,10 @@ def get_filters():
             "house_types":    house_types,
             "delivery_years": sorted([int(y) for y in df["delivery_year"].dropna().unique()]),
             "esg_grades":     sorted(df["esg_grade"].dropna().unique().tolist()),
-            "periods":        PERIODS_SORTED,
-            "latest_period":  _LATEST_DATA_PERIOD,
-            "prev_period":    PREV_PERIOD}
+            "periods":              PERIODS_SORTED,
+            "latest_period":        _LATEST_DATA_PERIOD,
+            "prev_period":          PREV_PERIOD,
+            "new_this_month_ids":   _new_this_month_ids}
 
 # ══════════════════════════════════════════════════════════════════════════
 #  SUMMARY / SNAPSHOT  (latest period by default)
