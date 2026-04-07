@@ -1121,6 +1121,43 @@ def nearby_apartments(listing_id: int, unit_type: Optional[str] = None, radius_k
     rows.sort(key=lambda r: r.get("price") or 999999)
     return safe_json({"comarca": str(comarca), "apartments": rows})
 
+
+@app.get("/nearby/apartments/{listing_id}/trend")
+def nearby_apartments_trend(listing_id: int, unit_type: Optional[str] = None, radius_km: Optional[float] = None):
+    """Avg price & price_per_m2 trend over all periods for similar nearby apartments."""
+    base = df[df["listing_id"]==listing_id]
+    if base.empty: return safe_json({"trend": []})
+    comarca = base["comarca"].iloc[0]
+    base_lat, base_lng, _ = _listing_coords(listing_id, str(base.iloc[0]["municipality"]))
+
+    if radius_km and base_lat and base_lng:
+        nearby_ids = [
+            lid for lid, c in LISTING_COORDS.items()
+            if _haversine_km(base_lat, base_lng, c["lat"], c["lng"]) <= radius_km
+        ]
+        d = df[df["listing_id"].isin(nearby_ids)].copy()
+    elif pd.isna(comarca):
+        return safe_json({"trend": []})
+    else:
+        d = df[df["comarca"] == comarca].copy()
+
+    if unit_type:
+        d = d[d["unit_type"] == unit_type]
+
+    # Exclude the current listing itself
+    d = d[d["listing_id"] != listing_id]
+    if d.empty: return safe_json({"trend": []})
+
+    trend = d.groupby(["period","period_ord"]).agg(
+        avg_price    =("price","mean"),
+        avg_price_m2 =("price_per_m2","mean"),
+        count        =("sub_listing_id","nunique"),
+    ).reset_index().sort_values("period_ord")
+    trend["avg_price"]    = trend["avg_price"].round(0)
+    trend["avg_price_m2"] = trend["avg_price_m2"].round(1)
+    return safe_json({"trend": trend.drop("period_ord",axis=1).to_dict(orient="records")})
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  LISTING DETAIL — enhanced with address + coords
 # ══════════════════════════════════════════════════════════════════════════
