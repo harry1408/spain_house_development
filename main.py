@@ -41,10 +41,12 @@ _CANDIDATES = [
     _SCRIPT_DIR,                          # legacy: xlsx files next to main.py
     _CWD,                                 # legacy: xlsx files in working dir
 ]
+_EXCLUDED_XLSX = {"expired_listing.xlsx"}
 _xlsx_files = []
 _DATA_DIR   = None
 for _candidate in _CANDIDATES:
-    _found = sorted(glob.glob(os.path.join(_candidate, "*.xlsx")))
+    _found = sorted(f for f in glob.glob(os.path.join(_candidate, "*.xlsx"))
+                    if os.path.basename(f) not in _EXCLUDED_XLSX)
     if _found:
         _xlsx_files = _found
         _DATA_DIR   = _candidate
@@ -60,6 +62,31 @@ print(f"[data] Data dir : {_DATA_DIR}")
 print(f"[data] Loading  : {[os.path.basename(f) for f in _xlsx_files]}")
 _raw = pd.concat([pd.read_excel(f) for f in _xlsx_files], ignore_index=True)
 print(f"[data] Rows: {len(_raw):,}  |  provinces: {sorted(_raw['province'].dropna().unique().tolist())}")
+
+# Load expired_listing sheet: sub_listing → removed_date
+_EXPIRED_FILE = os.path.join(_DATA_DIR, "expired_listing.xlsx")
+_expired_df   = pd.DataFrame()
+if os.path.exists(_EXPIRED_FILE):
+    try:
+        _expired_df = pd.read_excel(_EXPIRED_FILE)
+        # Normalise column names
+        _expired_df.columns = [c.strip().lower().replace(" ","_") for c in _expired_df.columns]
+        # Parse removed_date → formatted string "D Mon YYYY"
+        _expired_df["removed_date"] = pd.to_datetime(_expired_df["removed_date"], dayfirst=True, errors="coerce")
+        _expired_df["removed_date_str"] = _expired_df["removed_date"].apply(
+            lambda d: f"{d.day} {d.strftime('%b')} {d.year}" if pd.notna(d) else None)
+        print(f"[data] Expired listings loaded: {len(_expired_df):,} rows")
+    except Exception as e:
+        print(f"[data] Could not load expired_listing.xlsx: {e}")
+
+# Build dicts keyed by sub_listing_id
+_sub_to_sold_date: dict = {}
+if not _expired_df.empty and "sub_listing" in _expired_df.columns:
+    for _, row in _expired_df.iterrows():
+        sid = row.get("sub_listing")
+        dt  = row.get("removed_date_str")
+        if pd.notna(sid) and dt:
+            _sub_to_sold_date[int(sid)] = dt
 
 # Load geocoded streets CSV if present
 _STREETS_CSV = os.path.join(_DATA_DIR, "combined_geocoded.csv")
@@ -144,6 +171,20 @@ def _extract_stated_units(description: str):
             if 2 <= n <= 2000:
                 return n
     return None
+
+# ── Precompute stated total units from descriptions (done once at startup) ──
+_desc_col = next((c for c in ["description","property_description","descripcion","desc","comments"]
+                  if c in df.columns), None)
+if _desc_col:
+    _latest_listings = _latest_df().drop_duplicates(subset=["listing_id"])[["listing_id", _desc_col]].copy()
+    _latest_listings["_stated"] = _latest_listings[_desc_col].apply(
+        lambda v: _extract_stated_units(str(v)) if pd.notna(v) else None)
+    _STATED_TOTAL_UNITS = int(_latest_listings["_stated"].dropna().sum())
+    _STATED_UNIT_COUNT  = int(_latest_listings["_stated"].notna().sum())
+    print(f"[data] Stated total units (from descriptions): {_STATED_TOTAL_UNITS:,} across {_STATED_UNIT_COUNT:,} listings")
+else:
+    _STATED_TOTAL_UNITS = 0
+    _STATED_UNIT_COUNT  = 0
 
 _STRIP_LINES = [
     "This comment was automatically translated and may not be 100% accurate.",
@@ -301,7 +342,7 @@ def get_filters():
             "delivery_years": sorted([int(y) for y in df["delivery_year"].dropna().unique()]),
             "esg_grades":     sorted(df["esg_grade"].dropna().unique().tolist()),
             "periods":        PERIODS_SORTED,
-            "latest_period":  LATEST_PERIOD,
+            "latest_period":  _LATEST_DATA_PERIOD,
             "prev_period":    PREV_PERIOD}
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -323,6 +364,8 @@ def get_stats(municipality: Optional[List[str]] = Query(None),
                        "avg_size":     round(float(d["size"].mean()),1)  if len(d) else 0,
                        "total_developments": int(d["listing_id"].nunique())}
     cur = _s(d)
+    cur["total_stated_units"] = _STATED_TOTAL_UNITS
+    cur["stated_unit_count"]  = _STATED_UNIT_COUNT
     cur["prev"] = _s(p) if p is not None else None
     cur["prev_period"] = PREV_PERIOD
     return cur
@@ -471,7 +514,7 @@ def market_trend(municipality: Optional[List[str]] = Query(None),
 @app.get("/temporal/unit-type-trend")
 def unit_type_trend(municipality: Optional[List[str]] = Query(None),
                     province:     Optional[List[str]] = Query(None)):
-    d = _filter(municipality, province=province)
+    d = _filter(municipality, province=province, df_src=_full)
     r = d.groupby(["period","period_ord","unit_type"]).agg(
         avg_price=("price","mean"), count=("sub_listing_id","nunique")
     ).reset_index().sort_values(["unit_type","period_ord"])
@@ -481,7 +524,7 @@ def unit_type_trend(municipality: Optional[List[str]] = Query(None),
 @app.get("/temporal/municipality-trend")
 def municipality_trend(municipality: Optional[List[str]] = Query(None),
                        province:     Optional[List[str]] = Query(None)):
-    d = _filter(municipality, province=province) if municipality else df
+    d = _filter(municipality, province=province, df_src=_full) if municipality else _full
     r = d.groupby(["municipality","period","period_ord"]).agg(
         avg_price    =("price","mean"),
         avg_price_m2 =("price_per_m2","mean"),
@@ -496,7 +539,7 @@ def inventory_trend(municipality: Optional[List[str]] = Query(None),
                     province:     Optional[List[str]] = Query(None),
                     unit_type:    Optional[List[str]] = Query(None)):
     """Units available per period, plus new/removed vs prior period."""
-    d = _filter(municipality, unit_type, province=province)
+    d = _filter(municipality, unit_type, province=province, df_src=_full)
     result = []
     prev_ids = None
     for period in PERIODS_SORTED:
@@ -1148,6 +1191,8 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
         "avg_price": round(float(dp["price"].mean())) if len(dp) else 0,
         "avg_price_m2": round(float(dp["price_per_m2"].mean()), 1) if len(dp) else 0,
     }
+    for r in records:
+        r["sold_date"] = _listing_sold_date(int(r["listing_id"]))
     return safe_json({"listings": records, "summary": summary,
                       "periods": {"prev": PREV_PERIOD, "latest": LATEST_PERIOD}})
 
@@ -1186,6 +1231,7 @@ def delisted_apartments(listing_id: int):
         "municipality":  str(meta["municipality"]),
         "developer":     str(meta["developer"]) if pd.notna(meta.get("developer")) else None,
         "last_period":   str(dp.iloc[0]["period"]) if not dp.empty else PREV_PERIOD,
+        "sold_date":     _listing_sold_date(listing_id),
         "city_area":     str(meta["city_area"]) if pd.notna(meta.get("city_area")) else None,
         "esg_grade":     str(meta["esg_grade"]) if pd.notna(meta.get("esg_grade")) else None,
         "description":   str(meta["description"]) if pd.notna(meta.get("description")) else None,
@@ -1792,6 +1838,10 @@ def export_listings_excel(ids: str = Query(...)):
         for _sl in _strip_lines:
             desc_raw = desc_raw.replace(_sl, "")
         desc_raw = desc_raw.strip()
+        _lat, _lng, _ = _listing_coords(lid, str(meta.get("municipality","")))
+        _lat_exact = _lat is not None
+        if _lat is None: _lat = 39.47
+        if _lng is None: _lng = -0.38
         listings_data.append({
             "property_name": str(meta.get("property_name","")),
             "developer":     str(meta.get("developer","")),
@@ -1805,6 +1855,9 @@ def export_listings_excel(ids: str = Query(...)):
             "description":   desc_raw,
             "total_units":   len(apts),
             "apartments":    apts,
+            "lat":           round(_lat, 6),
+            "lng":           round(_lng, 6),
+            "lat_exact":     _lat_exact,
         })
 
     # ── Build Excel ────────────────────────────────────────────────────────
@@ -1829,10 +1882,9 @@ def export_listings_excel(ids: str = Query(...)):
     def border(): return Border(bottom=thin)
 
     def col(n): return get_column_letter(n)
-    NCOLS = 18  # total columns
+    # Cols: 1-11 = listing info (added Lat, Lng), 12-20 = apartment detail
+    NCOLS = 20
 
-    # ── Column definitions ─────────────────────────────────────────────────
-    # Cols: 1-9 = listing info, 10-18 = apartment detail
     APT_HEADERS = ["Unit Type","House Type","Floor","Beds","Baths","Size (m²)","Price (€)","€/m²","Amenities / Link"]
 
     import datetime as _dt
@@ -1845,24 +1897,26 @@ def export_listings_excel(ids: str = Query(...)):
     c.font = Font(name=FONT_NAME, bold=True, size=15, color=NAVY)
     c.alignment = aln(); ws.row_dimensions[1].height = 28
 
-    # ── Row 2: Description ────────────────────────────────────────────────
+    # ── Row 2: Subheading — lighter shade ─────────────────────────────────
     ws.merge_cells(f"A2:{col(NCOLS)}2")
     c = ws["A2"]
     c.value = f"Residential new-build developments | Unit-level pricing & specifications | Exported {export_date}"
-    c.font = Font(name=FONT_NAME, size=10, italic=True, color="3A4A6B")
-    c.fill = fill("EEF1F8")
+    c.font = Font(name=FONT_NAME, size=10, italic=True, color="6B7A9F")
+    c.fill = fill("F5F7FC")   # 2-3 shades lighter than original EEF1F8
     c.alignment = aln()
     ws.row_dimensions[2].height = 18
 
     # ── Row 3: Column headers ─────────────────────────────────────────────
     ws.row_dimensions[3].height = 30
     listing_headers = ["Property Name","Developer","City Area","Municipality","Province",
-                       "House Type","Delivery","ESG","Total Units"]
-    for i, h in enumerate(listing_headers + APT_HEADERS):
+                       "House Type","Delivery","ESG","Total Units","Latitude","Longitude"]
+    all_headers = listing_headers + APT_HEADERS
+    NL = len(listing_headers)  # 11 listing cols
+    for i, h in enumerate(all_headers):
         c = ws[f"{col(i+1)}3"]
         c.value = h
         c.font = font(bold=True, color="FFFFFF", size=9)
-        c.fill = fill(NAVY) if i < 9 else fill(DGREY)
+        c.fill = fill(NAVY) if i < NL else fill(DGREY)
         c.alignment = aln("center", wrap=True)
         c.border = border()
     ws.freeze_panes = "A4"
@@ -1872,16 +1926,19 @@ def export_listings_excel(ids: str = Query(...)):
     for li, ld in enumerate(listings_data):
         apts  = ld["apartments"]
         n_apt = len(apts)
-        bg_l  = fill("1A2855")    # listing header dark blue
-        bg_a0 = fill(LGREY)       # apt row even
-        bg_a1 = fill("FFFFFF")    # apt row odd
+        bg_l  = fill("2A3F6F")    # listing header — slightly lighter navy
+        bg_a0 = fill(LGREY)
+        bg_a1 = fill("FFFFFF")
 
         # ── Listing header row ────────────────────────────────────────────
         ws.row_dimensions[row].height = 18
+        lat_label = str(ld["lat"]) if ld["lat_exact"] else f"~{ld['lat']} (approx)"
+        lng_label = str(ld["lng"]) if ld["lat_exact"] else f"~{ld['lng']} (approx)"
         listing_vals = [
             ld["property_name"], ld["developer"], ld["city_area"],
             ld["municipality"],  ld["province"],  ld["house_type"],
             ld["delivery_date"], ld["esg"],        f'{n_apt} units',
+            lat_label, lng_label,
         ]
         for ci, v in enumerate(listing_vals):
             c = ws[f"{col(ci+1)}{row}"]
@@ -1889,23 +1946,23 @@ def export_listings_excel(ids: str = Query(...)):
             c.font  = font(bold=True, color="FFFFFF", size=10)
             c.fill  = bg_l
             c.alignment = aln("left")
-        # Fill apt columns with empty (same dark background for visual band)
-        for ci in range(9, NCOLS):
+        # Fill apt columns with same background
+        for ci in range(NL, NCOLS):
             ws[f"{col(ci+1)}{row}"].fill = bg_l
-        # Show listing amenities in col 18
+        # Amenities in last col
         c = ws[f"{col(NCOLS)}{row}"]
         c.value = f'Amenities: {ld["amenities"]}' if ld["amenities"] else ""
         c.font  = font(bold=False, color="C5CBE9", size=9, italic=True)
         c.fill  = bg_l
         row += 1
 
-        # ── Description row (if available) ────────────────────────────────
+        # ── Description row ────────────────────────────────────────────────
         if ld.get("description"):
             ws.merge_cells(f"A{row}:{col(NCOLS)}{row}")
             c = ws[f"A{row}"]
             c.value = ld["description"]
-            c.font  = Font(name=FONT_NAME, size=9, italic=True, color="3A4A6B")
-            c.fill  = fill("F4F6FB")
+            c.font  = Font(name=FONT_NAME, size=9, italic=True, color="6B7A9F")
+            c.fill  = fill("F5F7FC")
             c.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
             ws.row_dimensions[row].height = 42
             row += 1
@@ -1915,7 +1972,7 @@ def export_listings_excel(ids: str = Query(...)):
             ws.row_dimensions[row].height = 14
             bg = bg_a0 if ai % 2 == 0 else bg_a1
 
-            # Listing info cols (1-9) — greyed out repeat for context
+            # Listing info cols (1-NL) — greyed out repeat
             for ci, v in enumerate(listing_vals):
                 c = ws[f"{col(ci+1)}{row}"]
                 c.value = v if ci == 0 else ""   # only repeat property name
@@ -1923,14 +1980,14 @@ def export_listings_excel(ids: str = Query(...)):
                 c.fill  = bg
                 c.border = border()
 
-            # Apartment detail cols (10-18)
+            # Apartment detail cols (NL+1 onwards)
             apt_vals = [
                 apt["unit_type"], apt["house_type"], apt["floor"],
                 apt["bedrooms"],  apt["bathrooms"],  apt["size"],
                 apt["price"],     apt["pm2"],         apt["amenities"],
             ]
             for ci, v in enumerate(apt_vals):
-                c = ws[f"{col(10+ci)}{row}"]
+                c = ws[f"{col(NL+1+ci)}{row}"]
                 c.fill   = bg
                 c.border = border()
                 is_num   = ci in (3,4,5,6,7)
@@ -1941,7 +1998,7 @@ def export_listings_excel(ids: str = Query(...)):
                 elif ci == 7 and v:
                     c.value = v; c.number_format = "#,##0"
                     c.font  = font(color="3A4A6B", size=10)
-                elif ci == 0:  # unit type
+                elif ci == 0:
                     c.value = v
                     c.font  = font(bold=True, color=NAVY, size=10)
                 else:
@@ -1956,13 +2013,13 @@ def export_listings_excel(ids: str = Query(...)):
             c.fill = bg; c.border = border()
             row += 1
 
-        # Blank separator row between listings
+        # Blank separator row
         for ci in range(NCOLS):
             ws[f"{col(ci+1)}{row}"].fill = fill("FFFFFF")
         row += 1
 
     # ── Column widths ─────────────────────────────────────────────────────
-    widths = [28, 20, 18, 16, 12, 18, 14, 8, 10,
+    widths = [28, 20, 18, 16, 12, 18, 14, 8, 10, 13, 13,
               10, 14, 8,  6,  6,  8,  11, 8, 40]
     for i, w in enumerate(widths):
         ws.column_dimensions[col(i+1)].width = w
@@ -1973,6 +2030,236 @@ def export_listings_excel(ids: str = Query(...)):
     return StreamingResponse(buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=new_construction_projects.xlsx"})
+
+
+_FALLBACK_SOLD_DATE = "4 Apr 2026"  # fallback when no expired_listing entry found
+
+def _listing_sold_date(listing_id: int) -> str:
+    """Return the sold date for a listing: latest removed_date among its sub-listings, or fallback."""
+    sub_ids = df[df["listing_id"] == listing_id]["sub_listing_id"].dropna().astype(int).unique()
+    dates = [_sub_to_sold_date[s] for s in sub_ids if s in _sub_to_sold_date]
+    if not dates:
+        return _FALLBACK_SOLD_DATE
+    # Return the most recent date
+    import datetime as _dt
+    def _parse(d):
+        try: return _dt.datetime.strptime(d, "%d %b %Y")
+        except: return _dt.datetime.min
+    return max(dates, key=_parse)
+
+@app.get("/delisted/export")
+def export_delisted_excel():
+    """Export all sold-out properties: Sheet 1 = listings, Sheet 2 = apartments."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        return JSONResponse({"error": "openpyxl not installed"}, status_code=500)
+
+    import datetime as _dt
+    export_date = _dt.datetime.now().strftime("%d %B %Y")
+
+    d = df.copy()
+    has_latest     = set(d[d["_is_latest"]]["listing_id"].unique())
+    has_non_latest = set(d[~d["_is_latest"]]["listing_id"].unique())
+    delisted_ids   = has_non_latest - has_latest
+    if not delisted_ids:
+        return JSONResponse({"error": "No sold-out properties found"}, status_code=404)
+
+    d_non_latest = d[(d["listing_id"].isin(delisted_ids)) & (~d["_is_latest"])]
+    max_ords = d_non_latest.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_max_ord"})
+    d_snap   = d_non_latest.merge(max_ords, on="listing_id")
+    d_snap   = d_snap[d_snap["period_ord"] == d_snap["_max_ord"]]
+
+    NAVY   = "0B1239"
+    RED    = "7F1D1D"
+    LRED   = "FEF2F2"
+    DGREY  = "3A4A6B"
+    LGREY  = "F2F4F6"
+    STRIPE = "EBF0F7"
+    FONT   = "Aptos Narrow"
+
+    def fill(hex_): return PatternFill("solid", fgColor=hex_)
+    def font(bold=False, color="000000", size=10, italic=False, underline=None):
+        return Font(name=FONT, bold=bold, color=color, size=size, italic=italic, underline=underline)
+    def aln(h="left", v="center", wrap=False):
+        return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+    thin = Side(style="thin", color="D0D4DE")
+    def bdr(): return Border(bottom=thin)
+    def col(n): return get_column_letter(n)
+
+    wb = openpyxl.Workbook()
+
+    # ══════════════════════════════════════════════════════════════
+    # SHEET 1 — Sold Out Listings (one row per development)
+    # ══════════════════════════════════════════════════════════════
+    ws1 = wb.active
+    ws1.title = "Sold Out Properties"
+
+    LISTING_COLS = ["Property Name","Developer","Municipality","Province","City Area",
+                    "House Type","ESG","Last Seen Period","Sold Date","Total Units",
+                    "Avg Price (€)","Avg €/m²","Min Price (€)","Max Price (€)","Avg Size (m²)"]
+    NC1 = len(LISTING_COLS)
+
+    # Title
+    ws1.merge_cells(f"A1:{col(NC1)}1")
+    c = ws1["A1"]
+    c.value = "Sold Out Properties — Spain Housing Intelligence"
+    c.font = Font(name=FONT, bold=True, size=14, color=RED)
+    c.alignment = aln(); ws1.row_dimensions[1].height = 26
+
+    ws1.merge_cells(f"A2:{col(NC1)}2")
+    c = ws1["A2"]
+    c.value = f"Developments no longer listed as of {SOLD_DATE} | Exported {export_date}"
+    c.font = Font(name=FONT, size=10, italic=True, color=DGREY)
+    c.fill = fill("FFF1F1"); c.alignment = aln(); ws1.row_dimensions[2].height = 16
+
+    # Headers
+    ws1.row_dimensions[3].height = 26
+    for i, h in enumerate(LISTING_COLS):
+        c = ws1[f"{col(i+1)}3"]
+        c.value = h; c.font = font(bold=True, color="FFFFFF", size=9)
+        c.fill = fill(RED); c.alignment = aln("center", wrap=True); c.border = bdr()
+    ws1.freeze_panes = "A4"
+
+    # Data
+    listings_meta = d_snap.groupby("listing_id").first().reset_index()
+    listings_agg  = d_snap.groupby("listing_id").agg(
+        units=("sub_listing_id","nunique"),
+        avg_price=("price","mean"),
+        avg_pm2=("price_per_m2","mean"),
+        min_price=("price","min"),
+        max_price=("price","max"),
+        avg_size=("size","mean"),
+        last_period=("period","max"),
+    ).reset_index()
+    listings_meta = listings_meta.merge(listings_agg, on="listing_id", suffixes=("","_agg"))
+
+    row = 4
+    for i, r_ in listings_meta.iterrows():
+        bg = fill(LGREY) if i % 2 == 0 else fill("FFFFFF")
+        ht = str(r_.get("house_type","")) if pd.notna(r_.get("house_type")) else ""
+        vals = [
+            str(r_.get("property_name","")),
+            str(r_.get("developer","")) if pd.notna(r_.get("developer")) else "",
+            str(r_.get("municipality","")),
+            str(r_.get("province","")) if pd.notna(r_.get("province")) else "",
+            str(r_.get("city_area","")) if pd.notna(r_.get("city_area")) else "",
+            ht,
+            str(r_.get("esg_grade","")) if pd.notna(r_.get("esg_grade")) else "",
+            str(r_.get("last_period","")),
+            _listing_sold_date(int(r_["listing_id"])),
+            int(r_.get("units",0)) if pd.notna(r_.get("units")) else 0,
+            int(round(r_.get("avg_price",0))) if pd.notna(r_.get("avg_price")) else None,
+            int(round(r_.get("avg_pm2",0))) if pd.notna(r_.get("avg_pm2")) else None,
+            int(round(r_.get("min_price",0))) if pd.notna(r_.get("min_price")) else None,
+            int(round(r_.get("max_price",0))) if pd.notna(r_.get("max_price")) else None,
+            round(float(r_.get("avg_size",0)),1) if pd.notna(r_.get("avg_size")) else None,
+        ]
+        ws1.row_dimensions[row].height = 16
+        for ci, v in enumerate(vals):
+            c = ws1[f"{col(ci+1)}{row}"]
+            c.value = v; c.fill = bg; c.border = bdr()
+            is_price = ci in (10,11,12,13)
+            c.alignment = aln("right" if ci >= 9 else "left")
+            if is_price and v:
+                c.number_format = "#,##0"
+                c.font = font(color=RED if ci in (10,11) else DGREY, size=9)
+            elif ci == 8:  # Sold Date
+                c.font = font(bold=True, color=RED, size=9)
+            else:
+                c.font = font(color=DGREY, size=9)
+        row += 1
+
+    widths1 = [28,18,16,12,18,14,6,12,12,10,13,10,13,13,12]
+    for i, w in enumerate(widths1):
+        ws1.column_dimensions[col(i+1)].width = w
+
+    # ══════════════════════════════════════════════════════════════
+    # SHEET 2 — Sold Out Sub-listings (one row per apartment)
+    # ══════════════════════════════════════════════════════════════
+    ws2 = wb.create_sheet("Sold Out Units")
+
+    APT_COLS = ["Property Name","Municipality","Sold Date","Unit ID","Unit Type",
+                "Floor","Size (m²)","Bedrooms","Bathrooms","Price (€)","€/m²",
+                "Terrace","Parking","Pool","Lift","AC","Link"]
+    NC2 = len(APT_COLS)
+
+    ws2.merge_cells(f"A1:{col(NC2)}1")
+    c = ws2["A1"]
+    c.value = "Sold Out Units — Spain Housing Intelligence"
+    c.font = Font(name=FONT, bold=True, size=14, color=RED)
+    c.alignment = aln(); ws2.row_dimensions[1].height = 26
+
+    ws2.merge_cells(f"A2:{col(NC2)}2")
+    c = ws2["A2"]
+    c.value = f"Individual apartment records for all sold-out developments | Sold Date: {SOLD_DATE} | Exported {export_date}"
+    c.font = Font(name=FONT, size=10, italic=True, color=DGREY)
+    c.fill = fill("FFF1F1"); c.alignment = aln(); ws2.row_dimensions[2].height = 16
+
+    ws2.row_dimensions[3].height = 26
+    for i, h in enumerate(APT_COLS):
+        c = ws2[f"{col(i+1)}3"]
+        c.value = h; c.font = font(bold=True, color="FFFFFF", size=9)
+        c.fill = fill(RED); c.alignment = aln("center", wrap=True); c.border = bdr()
+    ws2.freeze_panes = "A4"
+
+    apt_cols_need = ["listing_id","sub_listing_id","property_name","municipality",
+                     "unit_type","floor","size","bedrooms","bathrooms","price","price_per_m2",
+                     "has_terrace","has_parking","has_pool","has_lift","has_ac","unit_url"]
+    apts_df = d_snap[[c_ for c_ in apt_cols_need if c_ in d_snap.columns]].drop_duplicates("sub_listing_id").copy()
+    apts_df = apts_df.sort_values(["listing_id","unit_type","price"])
+
+    row = 4
+    for i, r_ in apts_df.iterrows():
+        bg = fill(LGREY) if i % 2 == 0 else fill("FFFFFF")
+        def yn(col_): return "Yes" if pd.notna(r_.get(col_)) and bool(r_.get(col_)) else "No"
+        url = str(r_.get("unit_url","")) if "unit_url" in r_.index and pd.notna(r_.get("unit_url")) else ""
+        sub_id = int(r_["sub_listing_id"]) if "sub_listing_id" in r_.index and pd.notna(r_.get("sub_listing_id")) else None
+        apt_sold = _sub_to_sold_date.get(sub_id, _FALLBACK_SOLD_DATE) if sub_id else _FALLBACK_SOLD_DATE
+        vals = [
+            str(r_.get("property_name","")),
+            str(r_.get("municipality","")),
+            apt_sold,
+            str(r_.get("sub_listing_id","")) if pd.notna(r_.get("sub_listing_id")) else "",
+            str(r_.get("unit_type","")) if pd.notna(r_.get("unit_type")) else "",
+            str(r_.get("floor","")) if pd.notna(r_.get("floor")) else "",
+            round(float(r_.get("size",0)),1) if pd.notna(r_.get("size")) else None,
+            int(r_["bedrooms"]) if "bedrooms" in r_.index and pd.notna(r_.get("bedrooms")) else None,
+            int(r_["bathrooms"]) if "bathrooms" in r_.index and pd.notna(r_.get("bathrooms")) else None,
+            int(round(r_["price"])) if pd.notna(r_.get("price")) else None,
+            int(round(r_["price_per_m2"])) if "price_per_m2" in r_.index and pd.notna(r_.get("price_per_m2")) else None,
+            yn("has_terrace"), yn("has_parking"), yn("has_pool"), yn("has_lift"), yn("has_ac"),
+            url,
+        ]
+        ws2.row_dimensions[row].height = 14
+        for ci, v in enumerate(vals):
+            c = ws2[f"{col(ci+1)}{row}"]
+            c.value = v; c.fill = bg; c.border = bdr()
+            is_num = ci in (6,7,8,9,10)
+            c.alignment = aln("right" if is_num else "left")
+            if ci in (9,10) and v:
+                c.number_format = "#,##0"
+                c.font = font(bold=(ci==9), color=RED if ci==9 else DGREY, size=9)
+            elif ci == 2:  # Sold Date
+                c.font = font(bold=True, color=RED, size=9)
+            elif ci == 16 and url:  # Link
+                c.hyperlink = url
+                c.font = Font(name=FONT, color="0563C1", underline="single", size=9)
+            else:
+                c.font = font(color=DGREY, size=9)
+        row += 1
+
+    widths2 = [28,14,12,12,10,8,9,7,7,13,10,8,8,6,6,6,40]
+    for i, w in enumerate(widths2):
+        ws2.column_dimensions[col(i+1)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=sold_out_properties.xlsx"})
 
 
 @app.get("/export/by-filter")
