@@ -287,11 +287,13 @@ def _get_property_class(row):
 for _d in [df, _full]:
     _d["property_class"] = _d.apply(_get_property_class, axis=1)
 
-def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None, province=None, df_src=None, house_type=None):
+def _filter(municipality=None, unit_type=None, year=None, esg=None, period=None, province=None, df_src=None, house_type=None, all_periods=False):
     base = df_src if df_src is not None else df
     # When no period specified, use per-province latest (so all provinces show even if not in sync)
     if period:
         d = base[base["period"].isin(period)].copy()
+    elif all_periods:
+        d = base.copy()
     else:
         d = _latest_df(base).copy()
     if province:     d = d[d["province"].isin(province)]
@@ -499,7 +501,7 @@ def size_vs_price(municipality: Optional[List[str]] = Query(None),
 def market_trend(municipality: Optional[List[str]] = Query(None),
                  province:     Optional[List[str]] = Query(None),
                  unit_type:    Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, province=province, df_src=_full)
+    d = _filter(municipality, unit_type, province=province, df_src=_full, all_periods=True)
     r = d.groupby(["period","period_ord"]).agg(
         avg_price    =("price","mean"),
         avg_price_m2 =("price_per_m2","mean"),
@@ -514,7 +516,7 @@ def market_trend(municipality: Optional[List[str]] = Query(None),
 @app.get("/temporal/unit-type-trend")
 def unit_type_trend(municipality: Optional[List[str]] = Query(None),
                     province:     Optional[List[str]] = Query(None)):
-    d = _filter(municipality, province=province, df_src=_full)
+    d = _filter(municipality, province=province, df_src=_full, all_periods=True)
     r = d.groupby(["period","period_ord","unit_type"]).agg(
         avg_price=("price","mean"), count=("sub_listing_id","nunique")
     ).reset_index().sort_values(["unit_type","period_ord"])
@@ -524,7 +526,7 @@ def unit_type_trend(municipality: Optional[List[str]] = Query(None),
 @app.get("/temporal/municipality-trend")
 def municipality_trend(municipality: Optional[List[str]] = Query(None),
                        province:     Optional[List[str]] = Query(None)):
-    d = _filter(municipality, province=province, df_src=_full) if municipality else _full
+    d = _filter(municipality, province=province, df_src=_full, all_periods=True) if municipality else _full
     r = d.groupby(["municipality","period","period_ord"]).agg(
         avg_price    =("price","mean"),
         avg_price_m2 =("price_per_m2","mean"),
@@ -539,7 +541,7 @@ def inventory_trend(municipality: Optional[List[str]] = Query(None),
                     province:     Optional[List[str]] = Query(None),
                     unit_type:    Optional[List[str]] = Query(None)):
     """Units available per period, plus new/removed vs prior period."""
-    d = _filter(municipality, unit_type, province=province, df_src=_full)
+    d = _filter(municipality, unit_type, province=province, df_src=_full, all_periods=True)
     result = []
     prev_ids = None
     for period in PERIODS_SORTED:
