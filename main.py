@@ -1151,47 +1151,74 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
     if province:     d = d[d["province"].isin(province)]
     if municipality: d = d[d["municipality"].isin(municipality)]
 
-    # Per-province aware: a listing is delisted if it has rows in a non-latest period
-    # but no rows in its province's latest period (uses the pre-computed _is_latest flag)
+    # Per-province aware: a listing is fully delisted if it has rows in a non-latest period
+    # but no rows in its province's latest period
     has_latest     = set(d[d["_is_latest"]]["listing_id"].unique())
     has_non_latest = set(d[~d["_is_latest"]]["listing_id"].unique())
-    delisted       = has_non_latest - has_latest
+    fully_delisted = has_non_latest - has_latest
 
-    if not delisted:
+    # Partially delisted: still in latest period but lost some sub_listings vs previous period
+    d_latest     = d[d["_is_latest"]]
+    d_prev       = d[~d["_is_latest"]]
+    partial_delisted = set()
+    if PREV_PERIOD and not d_prev.empty:
+        prev_period_ord = d_prev["period_ord"].max()
+        d_prev_last = d_prev[d_prev["period_ord"] == prev_period_ord]
+        for lid in has_latest:
+            prev_subs   = set(d_prev_last[d_prev_last["listing_id"] == lid]["sub_listing_id"].unique())
+            latest_subs = set(d_latest[d_latest["listing_id"] == lid]["sub_listing_id"].unique())
+            if prev_subs and (prev_subs - latest_subs):
+                partial_delisted.add(lid)
+
+    all_delisted = fully_delisted | partial_delisted
+    if not all_delisted:
         return safe_json({"listings": [], "summary": {"count":0,"units":0}, "periods": {"prev":PREV_PERIOD,"latest":LATEST_PERIOD}})
 
-    # For each delisted listing, use its most recent (non-latest) period snapshot
-    d_non_latest = d[(d["listing_id"].isin(delisted)) & (~d["_is_latest"])]
-    max_ords = d_non_latest.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_max_ord"})
-    d_non_latest = d_non_latest.merge(max_ords, on="listing_id")
-    dp = d_non_latest[d_non_latest["period_ord"] == d_non_latest["_max_ord"]].drop("_max_ord", axis=1)
-    grp = dp.groupby(["listing_id","property_name","developer","municipality","city_area","esg_grade","delivery_date"], dropna=False).agg(
-        units        =("sub_listing_id","nunique"),
-        avg_price    =("price","mean"),
-        min_price    =("price","min"),
-        max_price    =("price","max"),
-        avg_price_m2 =("price_per_m2","mean"),
-        avg_size     =("size","mean"),
-        unit_types   =("unit_type",  lambda x: ", ".join(sorted(x.dropna().unique().tolist()))),
-        house_types  =("house_type", lambda x: ", ".join(sorted(t for t in x.dropna().unique() if t))),
-        has_pool     =("has_pool","max"),
-        has_parking  =("has_parking","max"),
-        has_terrace  =("has_terrace","max"),
-        has_lift     =("has_lift","max"),
-        last_period  =("period","max"),
-    ).reset_index()
-    for c in ["avg_price","min_price","max_price"]:
-        grp[c] = grp[c].round(0)
-    grp["avg_price_m2"] = grp["avg_price_m2"].round(1)
-    grp["avg_size"]     = grp["avg_size"].round(1)
-    grp["esg_grade"]    = grp["esg_grade"].where(pd.notna(grp["esg_grade"]), None)
+    def _build_records(listing_ids, use_latest=False):
+        if use_latest:
+            dp = d_latest[d_latest["listing_id"].isin(listing_ids)]
+        else:
+            d_nl = d[(d["listing_id"].isin(listing_ids)) & (~d["_is_latest"])]
+            max_ords = d_nl.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_max_ord"})
+            d_nl = d_nl.merge(max_ords, on="listing_id")
+            dp = d_nl[d_nl["period_ord"] == d_nl["_max_ord"]].drop("_max_ord", axis=1)
+        grp = dp.groupby(["listing_id","property_name","developer","municipality","city_area","esg_grade","delivery_date"], dropna=False).agg(
+            units        =("sub_listing_id","nunique"),
+            avg_price    =("price","mean"),
+            min_price    =("price","min"),
+            max_price    =("price","max"),
+            avg_price_m2 =("price_per_m2","mean"),
+            avg_size     =("size","mean"),
+            unit_types   =("unit_type",  lambda x: ", ".join(sorted(x.dropna().unique().tolist()))),
+            house_types  =("house_type", lambda x: ", ".join(sorted(t for t in x.dropna().unique() if t))),
+            has_pool     =("has_pool","max"),
+            has_parking  =("has_parking","max"),
+            has_terrace  =("has_terrace","max"),
+            has_lift     =("has_lift","max"),
+            last_period  =("period","max"),
+        ).reset_index()
+        for c in ["avg_price","min_price","max_price"]:
+            grp[c] = grp[c].round(0)
+        grp["avg_price_m2"] = grp["avg_price_m2"].round(1)
+        grp["avg_size"]     = grp["avg_size"].round(1)
+        grp["esg_grade"]    = grp["esg_grade"].where(pd.notna(grp["esg_grade"]), None)
+        return grp, dp
 
-    # Attach coords
+    grp_full, dp_full = _build_records(fully_delisted, use_latest=False)
+    grp_part, dp_part = _build_records(partial_delisted, use_latest=True)
+
+    grp_full["delisted_type"] = "full"
+    grp_part["delisted_type"] = "partial"
+
+    grp = pd.concat([grp_full, grp_part], ignore_index=True)
+    dp  = pd.concat([dp_full,  dp_part],  ignore_index=True)
+
     records = grp.to_dict(orient="records")
     for r in records:
         lat, lng, map_url = _listing_coords(int(r["listing_id"]), str(r["municipality"]))
         r["lat"] = lat or 39.47
         r["lng"] = lng or -0.38
+        r["sold_date"] = _listing_sold_date(int(r["listing_id"]))
 
     summary = {
         "count": len(records),
@@ -1199,8 +1226,6 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
         "avg_price": round(float(dp["price"].mean())) if len(dp) else 0,
         "avg_price_m2": round(float(dp["price_per_m2"].mean()), 1) if len(dp) else 0,
     }
-    for r in records:
-        r["sold_date"] = _listing_sold_date(int(r["listing_id"]))
     return safe_json({"listings": records, "summary": summary,
                       "periods": {"prev": PREV_PERIOD, "latest": LATEST_PERIOD}})
 
