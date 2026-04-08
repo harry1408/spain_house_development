@@ -675,6 +675,24 @@ def drilldown_municipality(municipality: str):
     else:
         ht_stats = pd.DataFrame()
 
+    # Per-listing, per-unit-type and per-house-type counts for accurate frontend breakdown
+    _dd_lid_ut = (
+        dl.groupby(["listing_id","unit_type"])["sub_listing_id"]
+        .nunique().reset_index(name="cnt")
+    )
+    _dd_lid_ut_map = {}
+    for _, _r in _dd_lid_ut.iterrows():
+        _dd_lid_ut_map.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = int(_r["cnt"])
+
+    _dd_lid_ht = (
+        dl[dl["house_type"].notna() & (dl["house_type"] != "")]
+        .groupby(["listing_id","house_type"])["sub_listing_id"]
+        .nunique().reset_index(name="cnt")
+    )
+    _dd_lid_ht_map = {}
+    for _, _r in _dd_lid_ht.iterrows():
+        _dd_lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
+
     listings_records = listings_grp.to_dict(orient="records")
     for rec in listings_records:
         lid = int(rec["listing_id"])
@@ -682,6 +700,8 @@ def drilldown_municipality(municipality: str):
         rec["lat"] = _lat
         rec["lng"] = _lng
         rec["nearest_beach_km"], rec["nearest_beach_name"] = _nearest_beach(lid, _lat, _lng)
+        rec["unit_type_counts"]  = _dd_lid_ut_map.get(lid, {})
+        rec["house_type_counts"] = _dd_lid_ht_map.get(lid, {})
 
     return safe_json({"listings": listings_records,
                       "stats": stats,
@@ -760,11 +780,18 @@ def drilldown_listing(listing_id: int):
     apt_trend = d.groupby(["sub_listing_id","period","period_ord"]).agg(
         price        =("price","first"),
         price_per_m2 =("price_per_m2","first"),
+        unit_type    =("unit_type","first"),
     ).reset_index().sort_values(["sub_listing_id","period_ord"])
-    # attach metadata from latest record
-    apt_meta = d.drop_duplicates("sub_listing_id")[["sub_listing_id","unit_type","floor","size","unit_url","bedrooms"]]
+    # attach static metadata from latest record for each sub_listing
+    d_sorted = d.sort_values("period_ord") if "period_ord" in d.columns else d
+    apt_meta = d_sorted.drop_duplicates("sub_listing_id", keep="last")[["sub_listing_id","floor","size","unit_url","bedrooms"]]
     apt_trend = apt_trend.merge(apt_meta, on="sub_listing_id", how="left")
     apt_trend["price_per_m2"] = apt_trend["price_per_m2"].round(1)
+    # flag rows where unit_type differs from latest period for that sub_listing
+    latest_ut = apt_trend.groupby("sub_listing_id")["unit_type"].last().rename("current_unit_type")
+    apt_trend = apt_trend.merge(latest_ut, on="sub_listing_id", how="left")
+    apt_trend["unit_type_changed"] = apt_trend["unit_type"] != apt_trend["current_unit_type"]
+    apt_trend.drop(columns=["current_unit_type"], inplace=True)
     apt_trend_records = _clean(apt_trend.drop("period_ord",axis=1).to_dict(orient="records"))
 
     return safe_json({
@@ -802,7 +829,9 @@ def price_matrix(listing_id: int):
 
     rows = []
     for sub_id, grp in d.groupby("sub_listing_id"):
-        meta = grp.iloc[0]
+        # Use latest period's record for metadata (unit_type may have changed)
+        grp_sorted = grp.sort_values("period_ord") if "period_ord" in grp.columns else grp
+        meta = grp_sorted.iloc[-1]
         row = {
             "sub_listing_id": int(sub_id),
             "unit_type":  str(meta["unit_type"]),
@@ -845,6 +874,19 @@ def price_matrix(listing_id: int):
         # latest price for default sort
         row["latest_price"]    = valid[-1] if valid else None
         row["latest_ppm2"]     = row.get(f"ppm2_{periods[-1]}")
+
+        # detect unit_type changes across periods
+        ut_by_period = {}
+        for period in periods:
+            pr = grp[grp["period"] == period]
+            if len(pr):
+                ut_by_period[period] = str(pr["unit_type"].iloc[0])
+        seen_uts = list(dict.fromkeys(ut_by_period.values()))  # ordered unique
+        row["unit_type_changed"] = len(seen_uts) > 1
+        row["unit_type_history"] = seen_uts if len(seen_uts) > 1 else []
+        # per-period unit types for tooltip
+        row["unit_type_by_period"] = ut_by_period
+
         rows.append(row)
 
     return safe_json({"periods": periods, "rows": rows})
@@ -1250,12 +1292,32 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
     grp = pd.concat([grp_full, grp_part], ignore_index=True)
     dp  = pd.concat([dp_full,  dp_part],  ignore_index=True)
 
+    # Per-listing, per-unit-type and per-house-type counts
+    _dl_lid_ut = (
+        dp.groupby(["listing_id","unit_type"])["sub_listing_id"]
+        .nunique().reset_index(name="cnt")
+    )
+    _dl_lid_ut_map = {}
+    for _, _r in _dl_lid_ut.iterrows():
+        _dl_lid_ut_map.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = int(_r["cnt"])
+
+    _dl_lid_ht = (
+        dp[dp["house_type"].notna() & (dp["house_type"] != "")]
+        .groupby(["listing_id","house_type"])["sub_listing_id"]
+        .nunique().reset_index(name="cnt")
+    )
+    _dl_lid_ht_map = {}
+    for _, _r in _dl_lid_ht.iterrows():
+        _dl_lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
+
     records = grp.to_dict(orient="records")
     for r in records:
         lat, lng, map_url = _listing_coords(int(r["listing_id"]), str(r["municipality"]))
         r["lat"] = lat or 39.47
         r["lng"] = lng or -0.38
         r["sold_date"] = _listing_sold_date(int(r["listing_id"]))
+        r["unit_type_counts"]  = _dl_lid_ut_map.get(int(r["listing_id"]), {})
+        r["house_type_counts"] = _dl_lid_ht_map.get(int(r["listing_id"]), {})
 
     summary = {
         "count": len(records),
@@ -1772,9 +1834,38 @@ def search_listings(
                     and _haversine_km(c_lat, c_lng, r["lat"], r["lng"]) <= radius_km]
 
     # Per-unit-type stats from the apartment-level data (accurate counts + prices per type)
-    # Use only listing_ids that survived the radius filter
+    # Use only listing_ids that survived the radius filter, and only the latest period per listing
+    # (a sub-listing that changed type across periods must only be counted once with its latest type)
     _radius_lids = set(r["listing_id"] for r in rows)
-    _d_for_ut = d[d["listing_id"].isin(_radius_lids)] if _radius_lids else d.iloc[0:0]
+    _d_for_ut_all = d[d["listing_id"].isin(_radius_lids)] if _radius_lids else d.iloc[0:0]
+    # Keep only the latest observed period per listing
+    _latest_ord = _d_for_ut_all.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_max_ord"})
+    _d_for_ut = _d_for_ut_all.merge(_latest_ord, on="listing_id")
+    _d_for_ut = _d_for_ut[_d_for_ut["period_ord"] == _d_for_ut["_max_ord"]].drop("_max_ord", axis=1)
+
+    # Per-listing, per-unit-type counts for accurate frontend breakdown
+    _lid_ut_counts = (
+        _d_for_ut.groupby(["listing_id","unit_type"])["sub_listing_id"]
+        .nunique().reset_index(name="cnt")
+    )
+    _lid_ut_map = {}
+    for _, _r in _lid_ut_counts.iterrows():
+        _lid_ut_map.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = int(_r["cnt"])
+    # Per-listing, per-house-type counts for accurate frontend breakdown
+    _lid_ht_counts = (
+        _d_for_ut[_d_for_ut["house_type"].notna() & (_d_for_ut["house_type"] != "")]
+        .groupby(["listing_id","house_type"])["sub_listing_id"]
+        .nunique().reset_index(name="cnt")
+    )
+    _lid_ht_map = {}
+    for _, _r in _lid_ht_counts.iterrows():
+        _lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
+
+    # Attach unit_type_counts and house_type_counts to each row
+    for _row in rows:
+        _row["unit_type_counts"]  = _lid_ut_map.get(int(_row["listing_id"]), {})
+        _row["house_type_counts"] = _lid_ht_map.get(int(_row["listing_id"]), {})
+
     _ut_order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
     _ut_agg = _d_for_ut.groupby("unit_type").agg(
         count     =("sub_listing_id","nunique"),
