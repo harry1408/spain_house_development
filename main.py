@@ -88,6 +88,10 @@ if not _expired_df.empty and "sub_listing" in _expired_df.columns:
         if pd.notna(sid) and dt:
             _sub_to_sold_date[int(sid)] = dt
 
+# Build listing_id → set of expired sub_listing_ids (populated after df is built below)
+# Will be computed after df is ready; see _build_listing_expired_counts()
+_listing_expired_counts: dict = {}   # listing_id → int (sold/expired sub-listing count)
+
 # Load geocoded streets CSV if present
 _STREETS_CSV = os.path.join(_DATA_DIR, "combined_geocoded.csv")
 _GEOCODED_STREETS = pd.DataFrame()
@@ -148,6 +152,35 @@ def _latest_df(df_src=None):
     """Return rows that represent the latest period for each province."""
     d = df_src if df_src is not None else df
     return d[d["_is_latest"]]
+
+# Build per-listing expired sub-listing count from expired_listing.xlsx
+# A sub-listing is "sold" if it appears in _sub_to_sold_date AND is NOT in the latest period
+def _build_listing_expired_counts():
+    if not _sub_to_sold_date:
+        return {}
+    expired_sub_ids = set(_sub_to_sold_date.keys())
+    # Active sub-listing IDs (latest period) — these are NOT sold even if in expired file
+    active_sub_ids = set(df[df["_is_latest"]]["sub_listing_id"].dropna().astype(int).unique())
+    truly_expired = expired_sub_ids - active_sub_ids
+    if not truly_expired:
+        return {}
+    # Map sub_listing_id → listing_id from the full df
+    sub_to_lid = (
+        df[df["sub_listing_id"].isin(truly_expired)][["sub_listing_id","listing_id"]]
+        .drop_duplicates("sub_listing_id")
+        .set_index("sub_listing_id")["listing_id"]
+        .astype(int)
+        .to_dict()
+    )
+    counts = {}
+    for sub_id in truly_expired:
+        lid = sub_to_lid.get(sub_id)
+        if lid is not None:
+            counts[lid] = counts.get(lid, 0) + 1
+    return counts
+
+_listing_expired_counts = _build_listing_expired_counts()
+print(f"[data] Listings with expired/sold sub-listings: {len(_listing_expired_counts)}")
 
 _UNIT_COUNT_PATTERNS = [
     re.compile(r'development of\s+(\d+)\s+(?:homes?|apartments?|properties|residences?|units?|dwellings?|viviendas?)', re.I),
@@ -732,19 +765,45 @@ def drilldown_municipality(municipality: str):
     for _, _r in _dd_lid_ht.iterrows():
         _dd_lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
 
-    # Previous period unit_type counts + price stats for partial sold-out listings
-    _dd_partial_lids = {lid for lid in _dd_lid_ut_map if lid in PARTIAL_DELISTED_IDS}
+    # Previous period data for ALL listings in this municipality
+    # sold = unique sub_listing_ids in non-latest periods that are NOT in latest period (truly removed)
+    _all_lids = set(int(lid) for lid in listings_grp["listing_id"].unique())
     _dd_prev_ut_map   = {}
     _dd_prev_ut_stats = {}
-    if _dd_partial_lids:
-        d_non_latest = d[~d["_is_latest"] & d["listing_id"].isin(_dd_partial_lids)]
-        if not d_non_latest.empty:
-            _dd_prev_max = d_non_latest.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_pm"})
-            _dd_d_prev = d_non_latest.merge(_dd_prev_max, on="listing_id")
-            _dd_d_prev = _dd_d_prev[_dd_d_prev["period_ord"] == _dd_d_prev["_pm"]]
-            for _, _r in _dd_d_prev.groupby(["listing_id","unit_type"])["sub_listing_id"].nunique().reset_index(name="cnt").iterrows():
+    _dd_prev_ht_map = {}
+    _dd_sold_per_lid: dict = {}  # listing_id → count of truly-removed (sold) sub-listings
+    # Active sub-listing count per listing (always computed — used in sold calculation below)
+    _dd_active_sub_cnt = dl.groupby("listing_id")["sub_listing_id"].nunique().to_dict()
+    # All latest sub-listing ids (for truly-removed filter)
+    _dd_all_latest_sub_ids = (
+        dl[["listing_id","sub_listing_id"]].drop_duplicates().assign(_in_latest=True)
+    )
+    d_non_latest_all = d[~d["_is_latest"] & d["listing_id"].isin(_all_lids)]
+    if not d_non_latest_all.empty:
+        # Truly removed = in non-latest periods but NOT in latest period at all
+        _dd_d_prev_removed_all = d_non_latest_all.merge(
+            _dd_all_latest_sub_ids, on=["listing_id","sub_listing_id"], how="left"
+        )
+        _dd_d_prev_removed_all = _dd_d_prev_removed_all[_dd_d_prev_removed_all["_in_latest"].isna()]
+        # Build per-listing sold count from truly-removed unique sub-listings
+        _dd_sold_counts = (
+            _dd_d_prev_removed_all.groupby("listing_id")["sub_listing_id"].nunique()
+        )
+        _dd_sold_per_lid = {int(k): int(v) for k, v in _dd_sold_counts.items()}
+        # For unit_type breakdown: only listings that actually have sold units
+        _dd_lids_with_sold = set(_dd_sold_per_lid.keys())
+        if _dd_lids_with_sold:
+            _dd_d_prev_removed = _dd_d_prev_removed_all[_dd_d_prev_removed_all["listing_id"].isin(_dd_lids_with_sold)]
+            d_non_latest = d_non_latest_all[d_non_latest_all["listing_id"].isin(_dd_lids_with_sold)]
+            for _, _r in (_dd_d_prev_removed[_dd_d_prev_removed["unit_type"].notna()]
+                          .groupby(["listing_id","unit_type"])["sub_listing_id"]
+                          .nunique().reset_index(name="cnt")).iterrows():
                 _dd_prev_ut_map.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = int(_r["cnt"])
-            _dd_price_agg = _dd_d_prev.groupby(["listing_id","unit_type"]).agg(
+            # Price stats: most recent previous period per listing
+            _dd_prev_max_ord = d_non_latest.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_pm"})
+            _dd_d_prev_latest = d_non_latest.merge(_dd_prev_max_ord, on="listing_id")
+            _dd_d_prev_latest = _dd_d_prev_latest[_dd_d_prev_latest["period_ord"] == _dd_d_prev_latest["_pm"]]
+            _dd_price_agg = _dd_d_prev_latest.groupby(["listing_id","unit_type"]).agg(
                 avg_price=("price","mean"), min_price=("price","min"),
                 max_price=("price","max"), avg_pm2=("price_per_m2","mean"), avg_size=("size","mean"),
             ).reset_index()
@@ -756,9 +815,8 @@ def drilldown_municipality(municipality: str):
                     "avg_pm2":   round(float(_r["avg_pm2"]))   if pd.notna(_r["avg_pm2"])   else None,
                     "avg_size":  round(float(_r["avg_size"]),1) if pd.notna(_r["avg_size"]) else None,
                 }
-            # Previous period house_type counts
-            _dd_prev_ht_map = {}
-            _dd_d_prev_ht = _dd_d_prev[_dd_d_prev["house_type"].notna() & (_dd_d_prev["house_type"] != "")]
+            # Historical house_type counts — only truly removed sub-listings (not still active)
+            _dd_d_prev_ht = _dd_d_prev_removed[_dd_d_prev_removed["house_type"].notna() & (_dd_d_prev_removed["house_type"] != "")]
             for _, _r in _dd_d_prev_ht.groupby(["listing_id","house_type"])["sub_listing_id"].nunique().reset_index(name="cnt").iterrows():
                 _dd_prev_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
 
@@ -774,7 +832,12 @@ def drilldown_municipality(municipality: str):
         rec["is_partial_delisted"]    = lid in PARTIAL_DELISTED_IDS
         rec["prev_unit_type_counts"]  = _dd_prev_ut_map.get(lid, {})
         rec["prev_unit_type_stats"]   = _dd_prev_ut_stats.get(lid, {})
-        rec["prev_house_type_counts"] = _dd_prev_ht_map.get(lid, {}) if _dd_partial_lids else {}
+        rec["prev_house_type_counts"] = _dd_prev_ht_map.get(lid, {})
+        # sold = truly removed sub-listings (in non-latest periods, not present in latest at all)
+        _active_cnt = _dd_active_sub_cnt.get(lid, int(rec.get("units", 0)))
+        _sold = _dd_sold_per_lid.get(lid, 0)
+        rec["prev_total_units"] = _sold  # sold count only
+        rec["units"] = _active_cnt + _sold  # total = active + sold
 
     return safe_json({"listings": listings_records,
                       "stats": stats,
@@ -816,19 +879,35 @@ def drilldown_listing(listing_id: int):
         r["lat"] = lat or 39.47
         r["lng"] = lng or -0.38
 
-    floor_price = dl.dropna(subset=["floor_num"])[["floor_num","price","unit_type","size","sub_listing_id"]].copy()
+    # ── All sub-listings: use last-seen record per sub_listing (active + sold) ──
+    _d_all_sorted = d.sort_values("period_ord")
+    _d_last = _d_all_sorted.drop_duplicates("sub_listing_id", keep="last").copy()
+    _latest_sub_ids = set(dl["sub_listing_id"].tolist())
+    _d_last["_status"] = _d_last["sub_listing_id"].apply(lambda x: "active" if x in _latest_sub_ids else "sold")
+
+    floor_price = _d_last.dropna(subset=["floor_num"])[["floor_num","price","unit_type","size","sub_listing_id"]].copy()
+    floor_price["floor_num"] = pd.to_numeric(floor_price["floor_num"], errors="coerce")
+    floor_price = floor_price.dropna(subset=["floor_num"])
     floor_price["floor_num"] = floor_price["floor_num"].astype(int)
 
-    unit_comp = dl.groupby("unit_type").agg(count=("price","count"), avg_price=("price","mean"),
-        min_price=("price","min"), max_price=("price","max"),
-        avg_size=("size","mean"), avg_price_m2=("price_per_m2","mean")).reset_index()
-    for c in ["avg_price","min_price","max_price"]:
-        unit_comp[c] = unit_comp[c].round(0)
-    unit_comp["avg_price_m2"] = unit_comp["avg_price_m2"].round(1)
-    unit_comp["avg_size"]     = unit_comp["avg_size"].round(1)
-    order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
-    unit_comp["_s"] = unit_comp["unit_type"].apply(lambda x: order.index(x) if x in order else 99)
-    unit_comp = unit_comp.sort_values("_s").drop("_s",axis=1)
+    # unit_comparison: include both active and sold sub-listings using last-known data
+    _uc_grp = _d_last[_d_last["unit_type"].notna()].groupby("unit_type")
+    _uc_rows = []
+    _ut_order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
+    for ut, grp in _uc_grp:
+        _uc_rows.append({
+            "unit_type":    str(ut),
+            "count":        int(len(grp)),
+            "active_count": int((grp["_status"] == "active").sum()),
+            "sold_count":   int((grp["_status"] == "sold").sum()),
+            "avg_price":    round(float(grp["price"].mean()))    if grp["price"].notna().any()       else None,
+            "min_price":    round(float(grp["price"].min()))     if grp["price"].notna().any()       else None,
+            "max_price":    round(float(grp["price"].max()))     if grp["price"].notna().any()       else None,
+            "avg_size":     round(float(grp["size"].mean()), 1)  if grp["size"].notna().any()        else None,
+            "avg_price_m2": round(float(grp["price_per_m2"].mean()), 1) if grp["price_per_m2"].notna().any() else None,
+        })
+    _uc_rows.sort(key=lambda r: _ut_order.index(r["unit_type"]) if r["unit_type"] in _ut_order else 99)
+    unit_comp = _uc_rows  # list of dicts, not DataFrame
 
     # ── LISTING TIME SERIES: avg price, inventory, unit mix per period ──────
     listing_trend = d.groupby(["period","period_ord"]).agg(
@@ -879,11 +958,19 @@ def drilldown_listing(listing_id: int):
         "stated_total_units": _extract_stated_units(next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"] if c in d.columns and pd.notna(meta.get(c))), None)),
         "nearest_beach_km":   (_nb := _nearest_beach(listing_id, lat, lng))[0],
         "nearest_beach_name": _nb[1],
-        "total_units":   int(len(dl)),
+        "active_units":  int(dl["sub_listing_id"].nunique()),
+        "sold_units":    max(
+            _listing_expired_counts.get(listing_id, 0),
+            max(0, int(d["sub_listing_id"].nunique()) - int(dl["sub_listing_id"].nunique()))
+        ),
+        "total_units":   int(dl["sub_listing_id"].nunique()) + max(
+            _listing_expired_counts.get(listing_id, 0),
+            max(0, int(d["sub_listing_id"].nunique()) - int(dl["sub_listing_id"].nunique()))
+        ),
         "periods":       PERIODS_SORTED,
         "apartments":    apt_records,
         "floor_price":   floor_price.to_dict(orient="records"),
-        "unit_comparison": unit_comp.to_dict(orient="records"),
+        "unit_comparison": unit_comp,
         "listing_trend": listing_trend.drop("period_ord",axis=1).to_dict(orient="records"),
         "unit_type_trend": ut_trend.drop("period_ord",axis=1).to_dict(orient="records"),
         "apt_trend":     apt_trend_records,
@@ -1109,20 +1196,31 @@ def map_listings(municipality: Optional[List[str]] = Query(None)):
         avg_price  = ("price","mean"),
         min_price  = ("price","min"),
     ).reset_index()
+    # All-time unique sub-listing count per listing (for sold = all_time - active)
+    _all_lids_map = set(grp["listing_id"].astype(int).unique())
+    _alltime_map  = {
+        int(k): int(v)
+        for k, v in df[df["listing_id"].isin(_all_lids_map)].groupby("listing_id")["sub_listing_id"].nunique().items()
+    }
     rows = []
     for _, r in grp.iterrows():
         lat, lng, map_url = _listing_coords(r["listing_id"], str(r["municipality"]) if pd.notna(r["municipality"]) else "")
         addr = _parse_address(r["city_area"])
         # Skip listings without real coords (fallback would cluster at 39.47,-0.38)
         if not lat or not lng: continue
+        lid        = int(r["listing_id"])
+        active_cnt = int(r["units"])
+        expired_sold = _listing_expired_counts.get(lid, 0)
+        period_sold  = max(0, _alltime_map.get(lid, active_cnt) - active_cnt)
+        sold_cnt     = max(expired_sold, period_sold)
         rows.append({
-            "listing_id":  int(r["listing_id"]),
+            "listing_id":  lid,
             "property_name": str(r["property_name"]),
             "municipality": str(r["municipality"]) if pd.notna(r["municipality"]) else "",
             "comarca":     str(r["comarca"])     if pd.notna(r["comarca"])     else "",
             "street":      addr.get("street","") or "",
             "lat": lat, "lng": lng, "map_url": map_url,
-            "units":     int(r["units"]),
+            "units":     active_cnt + sold_cnt,
             "avg_price": round(float(r["avg_price"])),
             "min_price": int(r["min_price"]),
         })
@@ -1931,8 +2029,9 @@ def search_listings(
     # Per-unit-type stats from the apartment-level data (accurate counts + prices per type)
     # Use only listing_ids that survived the radius filter, and only the latest period per listing
     # (a sub-listing that changed type across periods must only be counted once with its latest type)
+    # Use deduplicated df (not _raw) to avoid duplicate rows with conflicting house_type values
     _radius_lids = set(r["listing_id"] for r in rows)
-    _d_for_ut_all = d[d["listing_id"].isin(_radius_lids)] if _radius_lids else d.iloc[0:0]
+    _d_for_ut_all = df[df["listing_id"].isin(_radius_lids)] if _radius_lids else df.iloc[0:0]
     # Keep only the latest observed period per listing
     _latest_ord = _d_for_ut_all.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_max_ord"})
     _d_for_ut = _d_for_ut_all.merge(_latest_ord, on="listing_id")
@@ -1956,35 +2055,54 @@ def search_listings(
     for _, _r in _lid_ht_counts.iterrows():
         _lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
 
-    # For partial sold-out listings: previous period unit_type counts (to show sold units)
-    _prev_lid_ut_map = {}
-    _partial_lids = {int(r["listing_id"]) for r in rows if int(r["listing_id"]) in PARTIAL_DELISTED_IDS}
-    if _partial_lids:
-        _d_prev_all = _d_for_ut_all[_d_for_ut_all["listing_id"].isin(_partial_lids)]
-        # Get the period just before the latest for each listing
-        _prev_ord = (
-            _d_prev_all.merge(_latest_ord.rename(columns={"_max_ord":"_latest_ord"}), on="listing_id")
+    # Previous period data for ALL result listings
+    # sold = unique sub_listing_ids in non-latest periods that are NOT in latest period (truly removed)
+    _all_result_lids = {int(r["listing_id"]) for r in rows}
+    _prev_lid_ut_map   = {}
+    _prev_lid_ut_stats = {}
+    _prev_lid_ht_map   = {}
+    _sold_per_lid: dict = {}  # listing_id → count of truly-removed (sold) sub-listings
+    _d_prev_all_lids = _d_for_ut_all[_d_for_ut_all["listing_id"].isin(_all_result_lids)]
+    _active_sub_cnt = _d_for_ut.groupby("listing_id")["sub_listing_id"].nunique().to_dict()
+    _prev_all_with_ord = _d_prev_all_lids.merge(_latest_ord.rename(columns={"_max_ord":"_latest_ord"}), on="listing_id")
+    _prev_all_non_latest = _prev_all_with_ord[_prev_all_with_ord["period_ord"] < _prev_all_with_ord["_latest_ord"]]
+    if not _prev_all_non_latest.empty:
+        # All latest sub-listing ids (for truly-removed filter)
+        _all_latest_sub_ids_df = (
+            _d_for_ut[["listing_id","sub_listing_id"]].drop_duplicates().assign(_in_latest=True)
         )
-        _prev_ord = _prev_ord[_prev_ord["period_ord"] < _prev_ord["_latest_ord"]]
-        if not _prev_ord.empty:
-            _prev_max = _prev_ord.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_prev_max"})
-            _d_prev = _prev_ord.merge(_prev_max, on="listing_id")
-            _d_prev = _d_prev[_d_prev["period_ord"] == _d_prev["_prev_max"]]
+        # Truly removed = in non-latest periods but NOT in latest period at all
+        _d_prev_removed_all = _prev_all_non_latest.merge(
+            _all_latest_sub_ids_df, on=["listing_id","sub_listing_id"], how="left"
+        )
+        _d_prev_removed_all = _d_prev_removed_all[_d_prev_removed_all["_in_latest"].isna()]
+        # Build per-listing sold count from truly-removed unique sub-listings
+        _sold_per_lid = {
+            int(k): int(v)
+            for k, v in _d_prev_removed_all.groupby("listing_id")["sub_listing_id"].nunique().items()
+        }
+        _lids_with_sold = set(_sold_per_lid.keys())
+        if _lids_with_sold:
+            _d_prev_removed = _d_prev_removed_all[_d_prev_removed_all["listing_id"].isin(_lids_with_sold)]
+            _d_prev_sold = _prev_all_non_latest[_prev_all_non_latest["listing_id"].isin(_lids_with_sold)]
             _prev_lid_ut_counts = (
-                _d_prev.groupby(["listing_id","unit_type"])["sub_listing_id"]
+                _d_prev_removed[_d_prev_removed["unit_type"].notna()]
+                .groupby(["listing_id","unit_type"])["sub_listing_id"]
                 .nunique().reset_index(name="cnt")
             )
             for _, _r in _prev_lid_ut_counts.iterrows():
                 _prev_lid_ut_map.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = int(_r["cnt"])
-            # Previous period price stats per (listing, unit_type) for sold unit types
+            # Price stats: most recent previous period per listing
+            _prev_max_ord = _d_prev_sold.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_pm"})
+            _d_prev_latest = _d_prev_sold.merge(_prev_max_ord, on="listing_id")
+            _d_prev_latest = _d_prev_latest[_d_prev_latest["period_ord"] == _d_prev_latest["_pm"]]
             _prev_price_agg = (
-                _d_prev.groupby(["listing_id","unit_type"]).agg(
+                _d_prev_latest.groupby(["listing_id","unit_type"]).agg(
                     avg_price=("price","mean"), min_price=("price","min"),
                     max_price=("price","max"), avg_pm2=("price_per_m2","mean"),
                     avg_size=("size","mean"),
                 ).reset_index()
             )
-            _prev_lid_ut_stats = {}  # {listing_id: {unit_type: {avg_price, ...}}}
             for _, _r in _prev_price_agg.iterrows():
                 _prev_lid_ut_stats.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = {
                     "avg_price": round(float(_r["avg_price"])) if pd.notna(_r["avg_price"]) else None,
@@ -1993,17 +2111,10 @@ def search_listings(
                     "avg_pm2":   round(float(_r["avg_pm2"]))   if pd.notna(_r["avg_pm2"])   else None,
                     "avg_size":  round(float(_r["avg_size"]),1) if pd.notna(_r["avg_size"]) else None,
                 }
-            # Previous period house_type counts for sold units
-            _prev_lid_ht_map = {}
-            _d_prev_ht = _d_prev[_d_prev["house_type"].notna() & (_d_prev["house_type"] != "")]
+            # Historical house_type counts — only truly removed sub-listings (not still active)
+            _d_prev_ht = _d_prev_removed[_d_prev_removed["house_type"].notna() & (_d_prev_removed["house_type"] != "")]
             for _, _r in _d_prev_ht.groupby(["listing_id","house_type"])["sub_listing_id"].nunique().reset_index(name="cnt").iterrows():
                 _prev_lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
-        else:
-            _prev_lid_ut_stats = {}
-            _prev_lid_ht_map   = {}
-    else:
-        _prev_lid_ut_stats = {}
-        _prev_lid_ht_map   = {}
 
     # Attach unit_type_counts, house_type_counts and partial-delisted flag to each row
     for _row in rows:
@@ -2014,6 +2125,11 @@ def search_listings(
         _row["prev_unit_type_counts"]  = _prev_lid_ut_map.get(_lid_int, {})
         _row["prev_unit_type_stats"]   = _prev_lid_ut_stats.get(_lid_int, {})
         _row["prev_house_type_counts"] = _prev_lid_ht_map.get(_lid_int, {})
+        # sold = truly removed sub-listings (in non-latest periods, not present in latest at all)
+        _active_cnt_s = _active_sub_cnt.get(_lid_int, int(_row.get("units", 0)))
+        _sold_s = _sold_per_lid.get(_lid_int, 0)
+        _row["prev_total_units"] = _sold_s  # sold count only
+        _row["units"] = _active_cnt_s + _sold_s  # total = active + sold
 
     _ut_order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
     _ut_agg = _d_for_ut.groupby("unit_type").agg(
@@ -2194,14 +2310,18 @@ def export_listings_excel(ids: str = Query(...)):
     # Column layout:
     # A-E  (1-5):  Property Name, Developer, City Area, Municipality, Province  [listing info]
     # F-L  (6-12): Unit Type, House Type, Price (€), €/m², Floor, Beds, Bath   [per-unit]
-    # M-R  (13-18): Delivery, ESG, Total Units, Latitude, Longitude, Link       [listing tail]
+    # M-Q  (13-17): Delivery, ESG, Total Units, Latitude, Longitude             [listing tail]
+    # R    (18):   Link                                                          [per-unit]
+    # S    (19):   Description                                                   [merged rows]
     NL   = 5   # listing prefix cols (A-E)
     NAPT = 7   # per-unit cols (F-L): Unit Type, House Type, Price, €/m², Floor, Beds, Bath
-    NTAIL= 6   # listing tail cols (M-R): Delivery, ESG, Total Units, Lat, Lng, Link
-    NCOLS = NL + NAPT + NTAIL  # = 18
+    NTAIL= 5   # listing tail cols (M-Q): Delivery, ESG, Total Units, Lat, Lng
+    NCOLS = NL + NAPT + NTAIL + 1 + 1  # = 19  (+Link +Description)
+    COL_LINK = NL + NAPT + NTAIL + 1   # col 18 = R
+    COL_DESC = NL + NAPT + NTAIL + 2   # col 19 = S
 
     APT_HEADERS  = ["Unit Type","House Type","Price (€)","€/m²","Floor","Beds","Bath"]
-    TAIL_HEADERS = ["Delivery","ESG","Total Units","Latitude","Longitude","Link"]
+    TAIL_HEADERS = ["Delivery","ESG","Total Units","Latitude","Longitude"]
 
     import datetime as _dt
     export_date = _dt.datetime.now().strftime("%d %B %Y")
@@ -2225,7 +2345,7 @@ def export_listings_excel(ids: str = Query(...)):
     # ── Row 3: Column headers ─────────────────────────────────────────────
     ws.row_dimensions[3].height = 30
     listing_prefix = ["Property Name","Developer","City Area","Municipality","Province"]
-    all_headers = listing_prefix + APT_HEADERS + TAIL_HEADERS
+    all_headers = listing_prefix + APT_HEADERS + TAIL_HEADERS + ["Link","Description"]
     for i, h in enumerate(all_headers):
         c = ws[f"{col(i+1)}3"]
         c.value = h
@@ -2234,8 +2354,10 @@ def export_listings_excel(ids: str = Query(...)):
             c.fill = fill(NAVY)
         elif i < NL + NAPT:
             c.fill = fill(DGREY)
-        else:
+        elif i < NL + NAPT + NTAIL + 1:   # tail + link
             c.fill = fill("1A3060")
+        else:                               # description
+            c.fill = fill("2A3F6F")
         c.alignment = aln("center", wrap=True)
         c.border = border()
     ws.freeze_panes = "A4"
@@ -2252,55 +2374,51 @@ def export_listings_excel(ids: str = Query(...)):
         lat_label = str(ld["lat"]) if ld["lat_exact"] else f"~{ld['lat']} (approx)"
         lng_label = str(ld["lng"]) if ld["lat_exact"] else f"~{ld['lng']} (approx)"
 
-        # Listing prefix values (repeated per unit row)
         prefix_vals = [
             ld["property_name"], ld["developer"], ld["city_area"],
             ld["municipality"],  ld["province"],
         ]
-        # Listing tail values (repeated per unit row)
         tail_vals = [
             ld["delivery_date"], ld["esg"], f'{n_apt} units',
-            lat_label, lng_label, "",  # Link filled per-unit below
+            lat_label, lng_label,
         ]
 
-        # ── Listing header row (col A-R filled with navy) ─────────────────
+        # ── Listing header row (full width navy) ──────────────────────────
         ws.row_dimensions[row].height = 18
         for ci, v in enumerate(prefix_vals):
             c = ws[f"{col(ci+1)}{row}"]
             c.value = v
             c.font  = font(bold=True, color="FFFFFF", size=10)
-            c.fill  = bg_l
-            c.alignment = aln("left")
-        # Apt cols blank in header
+            c.fill  = bg_l; c.alignment = aln("left")
         for ci in range(NL, NL + NAPT):
-            c = ws[f"{col(ci+1)}{row}"]
-            c.fill = bg_l
-        # Tail cols in header
-        for ci, v in enumerate(tail_vals[:-1]):  # skip Link col
+            ws[f"{col(ci+1)}{row}"].fill = bg_l
+        for ci, v in enumerate(tail_vals):
             c = ws[f"{col(NL + NAPT + ci + 1)}{row}"]
             c.value = v
             c.font  = font(bold=True, color="FFFFFF", size=10)
-            c.fill  = bg_l
-            c.alignment = aln("left")
-        # Amenities in last col of header
-        c = ws[f"{col(NCOLS)}{row}"]
+            c.fill  = bg_l; c.alignment = aln("left")
+        # Link col (header) — amenities note
+        c = ws[f"{col(COL_LINK)}{row}"]
         c.value = f'Amenities: {ld["amenities"]}' if ld["amenities"] else ""
         c.font  = font(bold=False, color="C5CBE9", size=9, italic=True)
         c.fill  = bg_l
+        # Description col (header) — blank, will be merged across unit rows below
+        ws[f"{col(COL_DESC)}{row}"].fill = bg_l
+        header_row = row
         row += 1
 
         # ── Apartment rows ────────────────────────────────────────────────
+        apt_start_row = row
         for ai, apt in enumerate(apts):
             ws.row_dimensions[row].height = 14
             bg = bg_a0 if ai % 2 == 0 else bg_a1
 
-            # Prefix cols A-E (dim repeat)
+            # Prefix cols A-E
             for ci, v in enumerate(prefix_vals):
                 c = ws[f"{col(ci+1)}{row}"]
                 c.value = v if ci == 0 else ""
                 c.font  = font(color="9AA0B4", size=9)
-                c.fill  = bg
-                c.border = border()
+                c.fill  = bg; c.border = border()
 
             # Per-unit cols F-L: Unit Type, House Type, Price, €/m², Floor, Beds, Bath
             apt_vals = [
@@ -2310,12 +2428,9 @@ def export_listings_excel(ids: str = Query(...)):
             ]
             for ci, v in enumerate(apt_vals):
                 c = ws[f"{col(NL + ci + 1)}{row}"]
-                c.fill   = bg
-                c.border = border()
-                is_price = ci == 2
-                is_pm2   = ci == 3
-                is_num   = ci in (2, 3, 5, 6)
-                c.alignment = aln("right" if is_num else "left")
+                c.fill = bg; c.border = border()
+                is_price = ci == 2; is_pm2 = ci == 3
+                c.alignment = aln("right" if ci in (2,3,5,6) else "left")
                 if is_price and v:
                     c.value = v; c.number_format = "#,##0"
                     c.font  = font(bold=True, color=NAVY, size=10)
@@ -2323,39 +2438,41 @@ def export_listings_excel(ids: str = Query(...)):
                     c.value = v; c.number_format = "#,##0"
                     c.font  = font(color=DGREY, size=10)
                 elif ci == 0:
-                    c.value = v
-                    c.font  = font(bold=True, color=NAVY, size=10)
+                    c.value = v; c.font = font(bold=True, color=NAVY, size=10)
                 else:
-                    c.value = v
-                    c.font  = font(color=DGREY, size=9)
+                    c.value = v; c.font = font(color=DGREY, size=9)
 
-            # Tail cols M-Q: Delivery, ESG, Total Units, Lat, Lng
-            for ci, v in enumerate(tail_vals[:-1]):
+            # Tail cols M-Q (show only on first unit row)
+            for ci, v in enumerate(tail_vals):
                 c = ws[f"{col(NL + NAPT + ci + 1)}{row}"]
-                c.value = v if ai == 0 else ""   # only first unit row shows tail
+                c.value = v if ai == 0 else ""
                 c.font  = font(color="9AA0B4", size=9)
-                c.fill  = bg
-                c.border = border()
-                c.alignment = aln("left")
+                c.fill  = bg; c.border = border(); c.alignment = aln("left")
 
             # Link col R
-            c = ws[f"{col(NCOLS)}{row}"]
+            c = ws[f"{col(COL_LINK)}{row}"]
             c.fill = bg; c.border = border()
             if apt["url"]:
                 c.value = apt["url"]; c.hyperlink = apt["url"]
                 c.font  = Font(name=FONT_NAME, color="0563C1", underline="single", size=9)
+
+            # Description col S — filled but content added via merge below
+            ws[f"{col(COL_DESC)}{row}"].fill = bg_a0; ws[f"{col(COL_DESC)}{row}"].border = border()
             row += 1
 
-        # ── Description row (colspan, at end of listing) ──────────────────
-        if ld.get("description"):
-            ws.merge_cells(f"A{row}:{col(NCOLS)}{row}")
-            c = ws[f"A{row}"]
+        apt_end_row = row - 1
+
+        # ── Description: merged rows in last column (S), spanning all unit rows + header ──
+        if ld.get("description") and n_apt > 0:
+            merge_start = header_row
+            merge_end   = apt_end_row
+            if merge_end > merge_start:
+                ws.merge_cells(f"{col(COL_DESC)}{merge_start}:{col(COL_DESC)}{merge_end}")
+            c = ws[f"{col(COL_DESC)}{merge_start}"]
             c.value = ld["description"]
             c.font  = Font(name=FONT_NAME, size=9, italic=True, color="6B7A9F")
             c.fill  = fill("F5F7FC")
             c.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-            ws.row_dimensions[row].height = 42
-            row += 1
 
         # Blank separator row
         for ci in range(NCOLS):
@@ -2363,10 +2480,11 @@ def export_listings_excel(ids: str = Query(...)):
         row += 1
 
     # ── Column widths ─────────────────────────────────────────────────────
-    # A-E: listing prefix, F-L: per-unit, M-R: tail
+    # A-E: listing prefix, F-L: per-unit, M-Q: tail, R: link, S: description
     widths = [28, 20, 18, 16, 12,   # A-E
-              11, 16, 11, 9,  8, 6, 6,  # F-L
-              14,  8, 11, 13, 13, 40]   # M-R
+              11, 16, 11,  9,  8, 6, 6,  # F-L
+              14,  8, 11, 13, 13,        # M-Q
+              35, 50]                    # R (link), S (description)
     for i, w in enumerate(widths):
         ws.column_dimensions[col(i+1)].width = w
 
