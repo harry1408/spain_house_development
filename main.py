@@ -441,6 +441,45 @@ def municipality_overview(municipality: Optional[List[str]] = Query(None),
     r["avg_price_m2"] = r["avg_price_m2"].round(1)
     return safe_json(r.sort_values("units", ascending=False).to_dict(orient="records"))
 
+@app.get("/charts/municipality-activity")
+def municipality_activity(province: Optional[List[str]] = Query(None),
+                          municipality: Optional[List[str]] = Query(None)):
+    """Top municipalities by new listings and by sold-out listings (latest period)."""
+    d = df.copy()
+    if province:     d = d[d["province"].isin(province)]
+    if municipality: d = d[d["municipality"].isin(municipality)]
+
+    # New listings: listing_ids present in latest period but not in any prior period
+    new_ids = set(_new_this_month_ids)
+    d_new = d[d["listing_id"].isin(new_ids) & d["_is_latest"]]
+    new_by_muni = (
+        d_new.groupby("municipality")["listing_id"]
+        .nunique().reset_index(name="listings")
+        .sort_values("listings", ascending=False)
+        .head(15)
+    )
+
+    # Sold-out listings: present in non-latest period but absent from latest period
+    has_latest     = set(d[d["_is_latest"]]["listing_id"].unique())
+    has_non_latest = set(d[~d["_is_latest"]]["listing_id"].unique())
+    fully_delisted = has_non_latest - has_latest
+    d_sold = d[d["listing_id"].isin(fully_delisted) & ~d["_is_latest"]]
+    # Take last known period per listing to get municipality
+    max_ords = d_sold.groupby("listing_id")["period_ord"].max().reset_index(name="_max")
+    d_sold = d_sold.merge(max_ords, on="listing_id")
+    d_sold = d_sold[d_sold["period_ord"] == d_sold["_max"]]
+    sold_by_muni = (
+        d_sold.groupby("municipality")["listing_id"]
+        .nunique().reset_index(name="listings")
+        .sort_values("listings", ascending=False)
+        .head(15)
+    )
+
+    return safe_json({
+        "new_listings":  new_by_muni.to_dict(orient="records"),
+        "sold_out":      sold_by_muni.to_dict(orient="records"),
+    })
+
 @app.get("/charts/esg-breakdown")
 def esg_breakdown(municipality: Optional[List[str]] = Query(None),
                   province:     Optional[List[str]] = Query(None),
@@ -693,6 +732,36 @@ def drilldown_municipality(municipality: str):
     for _, _r in _dd_lid_ht.iterrows():
         _dd_lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
 
+    # Previous period unit_type counts + price stats for partial sold-out listings
+    _dd_partial_lids = {lid for lid in _dd_lid_ut_map if lid in PARTIAL_DELISTED_IDS}
+    _dd_prev_ut_map   = {}
+    _dd_prev_ut_stats = {}
+    if _dd_partial_lids:
+        d_non_latest = d[~d["_is_latest"] & d["listing_id"].isin(_dd_partial_lids)]
+        if not d_non_latest.empty:
+            _dd_prev_max = d_non_latest.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_pm"})
+            _dd_d_prev = d_non_latest.merge(_dd_prev_max, on="listing_id")
+            _dd_d_prev = _dd_d_prev[_dd_d_prev["period_ord"] == _dd_d_prev["_pm"]]
+            for _, _r in _dd_d_prev.groupby(["listing_id","unit_type"])["sub_listing_id"].nunique().reset_index(name="cnt").iterrows():
+                _dd_prev_ut_map.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = int(_r["cnt"])
+            _dd_price_agg = _dd_d_prev.groupby(["listing_id","unit_type"]).agg(
+                avg_price=("price","mean"), min_price=("price","min"),
+                max_price=("price","max"), avg_pm2=("price_per_m2","mean"), avg_size=("size","mean"),
+            ).reset_index()
+            for _, _r in _dd_price_agg.iterrows():
+                _dd_prev_ut_stats.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = {
+                    "avg_price": round(float(_r["avg_price"])) if pd.notna(_r["avg_price"]) else None,
+                    "min_price": round(float(_r["min_price"])) if pd.notna(_r["min_price"]) else None,
+                    "max_price": round(float(_r["max_price"])) if pd.notna(_r["max_price"]) else None,
+                    "avg_pm2":   round(float(_r["avg_pm2"]))   if pd.notna(_r["avg_pm2"])   else None,
+                    "avg_size":  round(float(_r["avg_size"]),1) if pd.notna(_r["avg_size"]) else None,
+                }
+            # Previous period house_type counts
+            _dd_prev_ht_map = {}
+            _dd_d_prev_ht = _dd_d_prev[_dd_d_prev["house_type"].notna() & (_dd_d_prev["house_type"] != "")]
+            for _, _r in _dd_d_prev_ht.groupby(["listing_id","house_type"])["sub_listing_id"].nunique().reset_index(name="cnt").iterrows():
+                _dd_prev_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
+
     listings_records = listings_grp.to_dict(orient="records")
     for rec in listings_records:
         lid = int(rec["listing_id"])
@@ -700,8 +769,12 @@ def drilldown_municipality(municipality: str):
         rec["lat"] = _lat
         rec["lng"] = _lng
         rec["nearest_beach_km"], rec["nearest_beach_name"] = _nearest_beach(lid, _lat, _lng)
-        rec["unit_type_counts"]  = _dd_lid_ut_map.get(lid, {})
-        rec["house_type_counts"] = _dd_lid_ht_map.get(lid, {})
+        rec["unit_type_counts"]       = _dd_lid_ut_map.get(lid, {})
+        rec["house_type_counts"]      = _dd_lid_ht_map.get(lid, {})
+        rec["is_partial_delisted"]    = lid in PARTIAL_DELISTED_IDS
+        rec["prev_unit_type_counts"]  = _dd_prev_ut_map.get(lid, {})
+        rec["prev_unit_type_stats"]   = _dd_prev_ut_stats.get(lid, {})
+        rec["prev_house_type_counts"] = _dd_prev_ht_map.get(lid, {}) if _dd_partial_lids else {}
 
     return safe_json({"listings": listings_records,
                       "stats": stats,
@@ -965,6 +1038,28 @@ def _build_listing_coords():
     return coords
 
 LISTING_COORDS = _build_listing_coords()
+
+# Pre-compute partial-delisted listing IDs (still active but lost some sub-listings vs prev period)
+def _build_partial_delisted_ids():
+    if not PREV_PERIOD:
+        return set()
+    d_latest = df[df["_is_latest"]]
+    d_prev   = df[~df["_is_latest"]]
+    if d_prev.empty:
+        return set()
+    prev_period_ord = d_prev["period_ord"].max()
+    d_prev_last = d_prev[d_prev["period_ord"] == prev_period_ord]
+    has_latest = set(d_latest["listing_id"].unique())
+    partial = set()
+    prev_subs_by_lid = d_prev_last.groupby("listing_id")["sub_listing_id"].apply(set).to_dict()
+    latest_subs_by_lid = d_latest.groupby("listing_id")["sub_listing_id"].apply(set).to_dict()
+    for lid in has_latest:
+        prev_subs = prev_subs_by_lid.get(lid, set())
+        if prev_subs and (prev_subs - latest_subs_by_lid.get(lid, set())):
+            partial.add(lid)
+    return partial
+
+PARTIAL_DELISTED_IDS = _build_partial_delisted_ids()
 
 def _listing_coords(listing_id, municipality=""):
     """Return (lat, lng, map_url) — from Excel coords first, then municipality fallback."""
@@ -1861,10 +1956,64 @@ def search_listings(
     for _, _r in _lid_ht_counts.iterrows():
         _lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
 
-    # Attach unit_type_counts and house_type_counts to each row
+    # For partial sold-out listings: previous period unit_type counts (to show sold units)
+    _prev_lid_ut_map = {}
+    _partial_lids = {int(r["listing_id"]) for r in rows if int(r["listing_id"]) in PARTIAL_DELISTED_IDS}
+    if _partial_lids:
+        _d_prev_all = _d_for_ut_all[_d_for_ut_all["listing_id"].isin(_partial_lids)]
+        # Get the period just before the latest for each listing
+        _prev_ord = (
+            _d_prev_all.merge(_latest_ord.rename(columns={"_max_ord":"_latest_ord"}), on="listing_id")
+        )
+        _prev_ord = _prev_ord[_prev_ord["period_ord"] < _prev_ord["_latest_ord"]]
+        if not _prev_ord.empty:
+            _prev_max = _prev_ord.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_prev_max"})
+            _d_prev = _prev_ord.merge(_prev_max, on="listing_id")
+            _d_prev = _d_prev[_d_prev["period_ord"] == _d_prev["_prev_max"]]
+            _prev_lid_ut_counts = (
+                _d_prev.groupby(["listing_id","unit_type"])["sub_listing_id"]
+                .nunique().reset_index(name="cnt")
+            )
+            for _, _r in _prev_lid_ut_counts.iterrows():
+                _prev_lid_ut_map.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = int(_r["cnt"])
+            # Previous period price stats per (listing, unit_type) for sold unit types
+            _prev_price_agg = (
+                _d_prev.groupby(["listing_id","unit_type"]).agg(
+                    avg_price=("price","mean"), min_price=("price","min"),
+                    max_price=("price","max"), avg_pm2=("price_per_m2","mean"),
+                    avg_size=("size","mean"),
+                ).reset_index()
+            )
+            _prev_lid_ut_stats = {}  # {listing_id: {unit_type: {avg_price, ...}}}
+            for _, _r in _prev_price_agg.iterrows():
+                _prev_lid_ut_stats.setdefault(int(_r["listing_id"]), {})[_r["unit_type"]] = {
+                    "avg_price": round(float(_r["avg_price"])) if pd.notna(_r["avg_price"]) else None,
+                    "min_price": round(float(_r["min_price"])) if pd.notna(_r["min_price"]) else None,
+                    "max_price": round(float(_r["max_price"])) if pd.notna(_r["max_price"]) else None,
+                    "avg_pm2":   round(float(_r["avg_pm2"]))   if pd.notna(_r["avg_pm2"])   else None,
+                    "avg_size":  round(float(_r["avg_size"]),1) if pd.notna(_r["avg_size"]) else None,
+                }
+            # Previous period house_type counts for sold units
+            _prev_lid_ht_map = {}
+            _d_prev_ht = _d_prev[_d_prev["house_type"].notna() & (_d_prev["house_type"] != "")]
+            for _, _r in _d_prev_ht.groupby(["listing_id","house_type"])["sub_listing_id"].nunique().reset_index(name="cnt").iterrows():
+                _prev_lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
+        else:
+            _prev_lid_ut_stats = {}
+            _prev_lid_ht_map   = {}
+    else:
+        _prev_lid_ut_stats = {}
+        _prev_lid_ht_map   = {}
+
+    # Attach unit_type_counts, house_type_counts and partial-delisted flag to each row
     for _row in rows:
-        _row["unit_type_counts"]  = _lid_ut_map.get(int(_row["listing_id"]), {})
-        _row["house_type_counts"] = _lid_ht_map.get(int(_row["listing_id"]), {})
+        _lid_int = int(_row["listing_id"])
+        _row["unit_type_counts"]       = _lid_ut_map.get(_lid_int, {})
+        _row["house_type_counts"]      = _lid_ht_map.get(_lid_int, {})
+        _row["is_partial_delisted"]    = _lid_int in PARTIAL_DELISTED_IDS
+        _row["prev_unit_type_counts"]  = _prev_lid_ut_map.get(_lid_int, {})
+        _row["prev_unit_type_stats"]   = _prev_lid_ut_stats.get(_lid_int, {})
+        _row["prev_house_type_counts"] = _prev_lid_ht_map.get(_lid_int, {})
 
     _ut_order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
     _ut_agg = _d_for_ut.groupby("unit_type").agg(
@@ -2031,7 +2180,6 @@ def export_listings_excel(ids: str = Query(...)):
     NAVY  = "0B1239"
     DGREY = "3A4A6B"
     LGREY = "F2F4F6"
-    STRIPE= "EBF0F7"
 
     FONT_NAME = "Aptos Narrow"
     def fill(hex_): return PatternFill("solid", fgColor=hex_)
@@ -2041,12 +2189,19 @@ def export_listings_excel(ids: str = Query(...)):
         return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
     thin = Side(style="thin", color="D0D4DE")
     def border(): return Border(bottom=thin)
-
     def col(n): return get_column_letter(n)
-    # Cols: 1-11 = listing info (added Lat, Lng), 12-20 = apartment detail
-    NCOLS = 20
 
-    APT_HEADERS = ["Unit Type","House Type","Floor","Beds","Baths","Size (m²)","Price (€)","€/m²","Amenities / Link"]
+    # Column layout:
+    # A-E  (1-5):  Property Name, Developer, City Area, Municipality, Province  [listing info]
+    # F-L  (6-12): Unit Type, House Type, Price (€), €/m², Floor, Beds, Bath   [per-unit]
+    # M-R  (13-18): Delivery, ESG, Total Units, Latitude, Longitude, Link       [listing tail]
+    NL   = 5   # listing prefix cols (A-E)
+    NAPT = 7   # per-unit cols (F-L): Unit Type, House Type, Price, €/m², Floor, Beds, Bath
+    NTAIL= 6   # listing tail cols (M-R): Delivery, ESG, Total Units, Lat, Lng, Link
+    NCOLS = NL + NAPT + NTAIL  # = 18
+
+    APT_HEADERS  = ["Unit Type","House Type","Price (€)","€/m²","Floor","Beds","Bath"]
+    TAIL_HEADERS = ["Delivery","ESG","Total Units","Latitude","Longitude","Link"]
 
     import datetime as _dt
     export_date = _dt.datetime.now().strftime("%d %B %Y")
@@ -2058,26 +2213,29 @@ def export_listings_excel(ids: str = Query(...)):
     c.font = Font(name=FONT_NAME, bold=True, size=15, color=NAVY)
     c.alignment = aln(); ws.row_dimensions[1].height = 28
 
-    # ── Row 2: Subheading — lighter shade ─────────────────────────────────
+    # ── Row 2: Subheading ─────────────────────────────────────────────────
     ws.merge_cells(f"A2:{col(NCOLS)}2")
     c = ws["A2"]
     c.value = f"Residential new-build developments | Unit-level pricing & specifications | Exported {export_date}"
     c.font = Font(name=FONT_NAME, size=10, italic=True, color="6B7A9F")
-    c.fill = fill("F5F7FC")   # 2-3 shades lighter than original EEF1F8
+    c.fill = fill("F5F7FC")
     c.alignment = aln()
     ws.row_dimensions[2].height = 18
 
     # ── Row 3: Column headers ─────────────────────────────────────────────
     ws.row_dimensions[3].height = 30
-    listing_headers = ["Property Name","Developer","City Area","Municipality","Province",
-                       "House Type","Delivery","ESG","Total Units","Latitude","Longitude"]
-    all_headers = listing_headers + APT_HEADERS
-    NL = len(listing_headers)  # 11 listing cols
+    listing_prefix = ["Property Name","Developer","City Area","Municipality","Province"]
+    all_headers = listing_prefix + APT_HEADERS + TAIL_HEADERS
     for i, h in enumerate(all_headers):
         c = ws[f"{col(i+1)}3"]
         c.value = h
         c.font = font(bold=True, color="FFFFFF", size=9)
-        c.fill = fill(NAVY) if i < NL else fill(DGREY)
+        if i < NL:
+            c.fill = fill(NAVY)
+        elif i < NL + NAPT:
+            c.fill = fill(DGREY)
+        else:
+            c.fill = fill("1A3060")
         c.alignment = aln("center", wrap=True)
         c.border = border()
     ws.freeze_panes = "A4"
@@ -2087,37 +2245,108 @@ def export_listings_excel(ids: str = Query(...)):
     for li, ld in enumerate(listings_data):
         apts  = ld["apartments"]
         n_apt = len(apts)
-        bg_l  = fill("2A3F6F")    # listing header — slightly lighter navy
+        bg_l  = fill("2A3F6F")
         bg_a0 = fill(LGREY)
         bg_a1 = fill("FFFFFF")
 
-        # ── Listing header row ────────────────────────────────────────────
-        ws.row_dimensions[row].height = 18
         lat_label = str(ld["lat"]) if ld["lat_exact"] else f"~{ld['lat']} (approx)"
         lng_label = str(ld["lng"]) if ld["lat_exact"] else f"~{ld['lng']} (approx)"
-        listing_vals = [
+
+        # Listing prefix values (repeated per unit row)
+        prefix_vals = [
             ld["property_name"], ld["developer"], ld["city_area"],
-            ld["municipality"],  ld["province"],  ld["house_type"],
-            ld["delivery_date"], ld["esg"],        f'{n_apt} units',
-            lat_label, lng_label,
+            ld["municipality"],  ld["province"],
         ]
-        for ci, v in enumerate(listing_vals):
+        # Listing tail values (repeated per unit row)
+        tail_vals = [
+            ld["delivery_date"], ld["esg"], f'{n_apt} units',
+            lat_label, lng_label, "",  # Link filled per-unit below
+        ]
+
+        # ── Listing header row (col A-R filled with navy) ─────────────────
+        ws.row_dimensions[row].height = 18
+        for ci, v in enumerate(prefix_vals):
             c = ws[f"{col(ci+1)}{row}"]
             c.value = v
             c.font  = font(bold=True, color="FFFFFF", size=10)
             c.fill  = bg_l
             c.alignment = aln("left")
-        # Fill apt columns with same background
-        for ci in range(NL, NCOLS):
-            ws[f"{col(ci+1)}{row}"].fill = bg_l
-        # Amenities in last col
+        # Apt cols blank in header
+        for ci in range(NL, NL + NAPT):
+            c = ws[f"{col(ci+1)}{row}"]
+            c.fill = bg_l
+        # Tail cols in header
+        for ci, v in enumerate(tail_vals[:-1]):  # skip Link col
+            c = ws[f"{col(NL + NAPT + ci + 1)}{row}"]
+            c.value = v
+            c.font  = font(bold=True, color="FFFFFF", size=10)
+            c.fill  = bg_l
+            c.alignment = aln("left")
+        # Amenities in last col of header
         c = ws[f"{col(NCOLS)}{row}"]
         c.value = f'Amenities: {ld["amenities"]}' if ld["amenities"] else ""
         c.font  = font(bold=False, color="C5CBE9", size=9, italic=True)
         c.fill  = bg_l
         row += 1
 
-        # ── Description row ────────────────────────────────────────────────
+        # ── Apartment rows ────────────────────────────────────────────────
+        for ai, apt in enumerate(apts):
+            ws.row_dimensions[row].height = 14
+            bg = bg_a0 if ai % 2 == 0 else bg_a1
+
+            # Prefix cols A-E (dim repeat)
+            for ci, v in enumerate(prefix_vals):
+                c = ws[f"{col(ci+1)}{row}"]
+                c.value = v if ci == 0 else ""
+                c.font  = font(color="9AA0B4", size=9)
+                c.fill  = bg
+                c.border = border()
+
+            # Per-unit cols F-L: Unit Type, House Type, Price, €/m², Floor, Beds, Bath
+            apt_vals = [
+                apt["unit_type"], apt["house_type"],
+                apt["price"],     apt["pm2"],
+                apt["floor"],     apt["bedrooms"], apt["bathrooms"],
+            ]
+            for ci, v in enumerate(apt_vals):
+                c = ws[f"{col(NL + ci + 1)}{row}"]
+                c.fill   = bg
+                c.border = border()
+                is_price = ci == 2
+                is_pm2   = ci == 3
+                is_num   = ci in (2, 3, 5, 6)
+                c.alignment = aln("right" if is_num else "left")
+                if is_price and v:
+                    c.value = v; c.number_format = "#,##0"
+                    c.font  = font(bold=True, color=NAVY, size=10)
+                elif is_pm2 and v:
+                    c.value = v; c.number_format = "#,##0"
+                    c.font  = font(color=DGREY, size=10)
+                elif ci == 0:
+                    c.value = v
+                    c.font  = font(bold=True, color=NAVY, size=10)
+                else:
+                    c.value = v
+                    c.font  = font(color=DGREY, size=9)
+
+            # Tail cols M-Q: Delivery, ESG, Total Units, Lat, Lng
+            for ci, v in enumerate(tail_vals[:-1]):
+                c = ws[f"{col(NL + NAPT + ci + 1)}{row}"]
+                c.value = v if ai == 0 else ""   # only first unit row shows tail
+                c.font  = font(color="9AA0B4", size=9)
+                c.fill  = bg
+                c.border = border()
+                c.alignment = aln("left")
+
+            # Link col R
+            c = ws[f"{col(NCOLS)}{row}"]
+            c.fill = bg; c.border = border()
+            if apt["url"]:
+                c.value = apt["url"]; c.hyperlink = apt["url"]
+                c.font  = Font(name=FONT_NAME, color="0563C1", underline="single", size=9)
+            row += 1
+
+        # ── Description row (colspan, at end of listing) ──────────────────
         if ld.get("description"):
             ws.merge_cells(f"A{row}:{col(NCOLS)}{row}")
             c = ws[f"A{row}"]
@@ -2128,60 +2357,16 @@ def export_listings_excel(ids: str = Query(...)):
             ws.row_dimensions[row].height = 42
             row += 1
 
-        # ── Apartment rows ────────────────────────────────────────────────
-        for ai, apt in enumerate(apts):
-            ws.row_dimensions[row].height = 14
-            bg = bg_a0 if ai % 2 == 0 else bg_a1
-
-            # Listing info cols (1-NL) — greyed out repeat
-            for ci, v in enumerate(listing_vals):
-                c = ws[f"{col(ci+1)}{row}"]
-                c.value = v if ci == 0 else ""   # only repeat property name
-                c.font  = font(color="9AA0B4", size=9)
-                c.fill  = bg
-                c.border = border()
-
-            # Apartment detail cols (NL+1 onwards)
-            apt_vals = [
-                apt["unit_type"], apt["house_type"], apt["floor"],
-                apt["bedrooms"],  apt["bathrooms"],  apt["size"],
-                apt["price"],     apt["pm2"],         apt["amenities"],
-            ]
-            for ci, v in enumerate(apt_vals):
-                c = ws[f"{col(NL+1+ci)}{row}"]
-                c.fill   = bg
-                c.border = border()
-                is_num   = ci in (3,4,5,6,7)
-                c.alignment = aln("right" if is_num else "left")
-                if ci == 6 and v:
-                    c.value = v; c.number_format = "#,##0"
-                    c.font  = font(bold=True, color=NAVY, size=10)
-                elif ci == 7 and v:
-                    c.value = v; c.number_format = "#,##0"
-                    c.font  = font(color="3A4A6B", size=10)
-                elif ci == 0:
-                    c.value = v
-                    c.font  = font(bold=True, color=NAVY, size=10)
-                else:
-                    c.value = v
-                    c.font  = font(color="3A4A6B", size=9)
-
-            # URL in last col
-            c = ws[f"{col(NCOLS)}{row}"]
-            if apt["url"]:
-                c.value = apt["url"]; c.hyperlink = apt["url"]
-                c.font  = Font(name=FONT_NAME, color="0563C1", underline="single", size=9)
-            c.fill = bg; c.border = border()
-            row += 1
-
         # Blank separator row
         for ci in range(NCOLS):
             ws[f"{col(ci+1)}{row}"].fill = fill("FFFFFF")
         row += 1
 
     # ── Column widths ─────────────────────────────────────────────────────
-    widths = [28, 20, 18, 16, 12, 18, 14, 8, 10, 13, 13,
-              10, 14, 8,  6,  6,  8,  11, 8, 40]
+    # A-E: listing prefix, F-L: per-unit, M-R: tail
+    widths = [28, 20, 18, 16, 12,   # A-E
+              11, 16, 11, 9,  8, 6, 6,  # F-L
+              14,  8, 11, 13, 13, 40]   # M-R
     for i, w in enumerate(widths):
         ws.column_dimensions[col(i+1)].width = w
 
