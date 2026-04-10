@@ -153,6 +153,12 @@ def _latest_df(df_src=None):
     d = df_src if df_src is not None else df
     return d[d["_is_latest"]]
 
+# Global set of active sub_listing_ids (latest period, all municipalities).
+# A sub-listing is "sold" only if its ID does not appear here.
+_global_active_sub_ids: set = set(
+    df[df["_is_latest"]]["sub_listing_id"].dropna().astype(int).unique()
+)
+
 # Build per-listing expired sub-listing count from expired_listing.xlsx
 # A sub-listing is "sold" if it appears in _sub_to_sold_date AND is NOT in the latest period
 def _build_listing_expired_counts():
@@ -476,12 +482,71 @@ def municipality_overview(municipality: Optional[List[str]] = Query(None),
                           esg:          Optional[List[str]] = Query(None),
                           period:       Optional[List[str]] = Query(None),
                           house_type:   Optional[List[str]] = Query(None)):
-    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
-    r = d.groupby("municipality").agg(units=("price","count"), listings=("listing_id","nunique"),
-                                      avg_price=("price","mean"), avg_price_m2=("price_per_m2","mean")).reset_index()
+    # Active listings — use _filter() exactly as the original endpoint did
+    d_active = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
+    r = d_active.groupby("municipality").agg(
+        units       =("price","count"),
+        listings    =("listing_id","nunique"),
+        avg_price   =("price","mean"),
+        avg_price_m2=("price_per_m2","mean"),
+    ).reset_index()
+
+    # Sold units: sub-listings in non-latest periods whose sub_listing_id is NOT
+    # in the global active set (latest period across all municipalities).
+    # sub_listing_id IS globally unique — a unit still active anywhere is not sold.
+    # Skip when a specific period is requested (sold is ambiguous there).
+    if "sub_listing_id" in df.columns and not period:
+        # Only count sold units from listings that still have active units.
+        # Fully sold-out developments are excluded from the sold count.
+        _active_lid_set = set(d_active["listing_id"].astype(int).tolist())
+        d_all = _filter(municipality, unit_type, year, esg, None, province,
+                        house_type=house_type, all_periods=True)
+        d_hist = d_all[
+            ~d_all["_is_latest"] &
+            d_all["sub_listing_id"].notna() &
+            d_all["listing_id"].astype(int).isin(_active_lid_set)
+        ].copy()
+        if not d_hist.empty:
+            d_hist["_sid_i"] = d_hist["sub_listing_id"].astype(int)
+            d_sold = d_hist[~d_hist["_sid_i"].isin(_global_active_sub_ids)]
+            if not d_sold.empty:
+                sold_by_muni = (d_sold.groupby("municipality")["_sid_i"]
+                                .nunique().reset_index(name="sold_units"))
+                r = r.merge(sold_by_muni, on="municipality", how="left")
+                r["sold_units"] = r["sold_units"].fillna(0).astype(int)
+                r["units"] = r["units"] + r["sold_units"]
+                r = r.drop(columns=["sold_units"])
+
     r["avg_price"]    = r["avg_price"].round(0)
     r["avg_price_m2"] = r["avg_price_m2"].round(1)
     return safe_json(r.sort_values("units", ascending=False).to_dict(orient="records"))
+
+@app.get("/debug/municipality-overview")
+def debug_municipality_overview(muni: str = "Valencia"):
+    """Debug: show active vs sold breakdown for a single municipality."""
+    d_active = _filter()
+    d_muni_active = d_active[d_active["municipality"] == muni]
+    active_count = int(d_muni_active["price"].count())
+
+    _active_lid_set = set(d_active["listing_id"].astype(int).tolist())
+    d_all  = _filter(all_periods=True)
+    d_hist = d_all[
+        ~d_all["_is_latest"] &
+        d_all["sub_listing_id"].notna() &
+        d_all["listing_id"].astype(int).isin(_active_lid_set)
+    ].copy()
+    d_hist["_sid_i"] = d_hist["sub_listing_id"].astype(int)
+    d_sold = d_hist[~d_hist["_sid_i"].isin(_global_active_sub_ids)]
+    sold_count = int(d_sold[d_sold["municipality"] == muni]["_sid_i"].nunique())
+
+    periods_in_data = sorted(d_all[d_all["municipality"]==muni]["period"].unique().tolist())
+    return safe_json({
+        "municipality": muni,
+        "active_units_latest_period": active_count,
+        "sold_units_truly_removed": sold_count,
+        "total_units": active_count + sold_count,
+        "periods_in_data": periods_in_data,
+    })
 
 @app.get("/charts/municipality-activity")
 def municipality_activity(province: Optional[List[str]] = Query(None),
@@ -813,17 +878,12 @@ def drilldown_municipality(municipality: str):
                 "avg_pm2":   round(float(_r["avg_pm2"]))   if pd.notna(_r["avg_pm2"])   else None,
                 "avg_size":  round(float(_r["avg_size"]),1) if pd.notna(_r["avg_size"]) else None,
             }
-    # All latest sub-listing ids (for truly-removed filter)
-    _dd_all_latest_sub_ids = (
-        dl[["listing_id","sub_listing_id"]].drop_duplicates().assign(_in_latest=True)
-    )
-    d_non_latest_all = d[~d["_is_latest"] & d["listing_id"].isin(_all_lids)]
+    # Truly removed = in non-latest periods AND sub_listing_id is not active anywhere globally.
+    # Use the global active set so the sold count matches the overview grid.
+    d_non_latest_all = d[~d["_is_latest"] & d["listing_id"].isin(_all_lids) & d["sub_listing_id"].notna()].copy()
     if not d_non_latest_all.empty:
-        # Truly removed = in non-latest periods but NOT in latest period at all
-        _dd_d_prev_removed_all = d_non_latest_all.merge(
-            _dd_all_latest_sub_ids, on=["listing_id","sub_listing_id"], how="left"
-        )
-        _dd_d_prev_removed_all = _dd_d_prev_removed_all[_dd_d_prev_removed_all["_in_latest"].isna()]
+        d_non_latest_all["_sid_i"] = d_non_latest_all["sub_listing_id"].astype(int)
+        _dd_d_prev_removed_all = d_non_latest_all[~d_non_latest_all["_sid_i"].isin(_global_active_sub_ids)]
         # Build per-listing sold count from truly-removed unique sub-listings
         _dd_sold_counts = (
             _dd_d_prev_removed_all.groupby("listing_id")["sub_listing_id"].nunique()
@@ -2230,15 +2290,10 @@ def search_listings(
             }
     _prev_all_non_latest = _d_prev_all_lids  # already non-latest by _is_latest flag
     if not _prev_all_non_latest.empty:
-        # All latest sub-listing ids (for truly-removed filter)
-        _all_latest_sub_ids_df = (
-            _d_for_ut[["listing_id","sub_listing_id"]].drop_duplicates().assign(_in_latest=True)
-        )
-        # Truly removed = in non-latest periods but NOT in latest period at all
-        _d_prev_removed_all = _prev_all_non_latest.merge(
-            _all_latest_sub_ids_df, on=["listing_id","sub_listing_id"], how="left"
-        )
-        _d_prev_removed_all = _d_prev_removed_all[_d_prev_removed_all["_in_latest"].isna()]
+        # Truly removed = sub_listing_id not present anywhere in the global active set
+        _prev_all_non_latest = _prev_all_non_latest[_prev_all_non_latest["sub_listing_id"].notna()].copy()
+        _prev_all_non_latest["_sid_i"] = _prev_all_non_latest["sub_listing_id"].astype(int)
+        _d_prev_removed_all = _prev_all_non_latest[~_prev_all_non_latest["_sid_i"].isin(_global_active_sub_ids)]
         # Build per-listing sold count from truly-removed unique sub-listings
         _sold_per_lid = {
             int(k): int(v)
