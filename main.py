@@ -274,13 +274,17 @@ def _floor_num(f):
     return int(m.group(1)) if m else None
 
 def _parse_amenities(s):
+    _s_raw = s
     if pd.isna(s): s = ""
     s = str(s)
     m_bed  = re.search(r"(\d+)\s+bedroom", s)
     m_bath = re.search(r"(\d+)\s+bathroom", s)
     m_fa   = re.search(r"(\d+)\s+m.*?floor area", s)
     sl = s.lower()
-    if "semi-detached" in sl or "semidetached" in sl or "semi detached" in sl:
+    # If amenities is missing/empty, house_type is unknown (None) — don't default to Apartments
+    if not sl.strip():
+        ht = None
+    elif "semi-detached" in sl or "semidetached" in sl or "semi detached" in sl:
         ht = "Semi-detached house"
     elif "detached house" in sl:
         ht = "Detached house"
@@ -971,6 +975,20 @@ def drilldown_listing(listing_id: int):
         "apartments":    apt_records,
         "floor_price":   floor_price.to_dict(orient="records"),
         "unit_comparison": unit_comp,
+        "house_type_comparison": (
+            _d_last[_d_last["house_type"].notna() & (_d_last["house_type"] != "")]
+            .groupby("house_type").apply(lambda g: {
+                "house_type":   g["house_type"].iloc[0],
+                "count":        int(len(g)),
+                "active_count": int((g["_status"] == "active").sum()),
+                "sold_count":   int((g["_status"] == "sold").sum()),
+                "avg_price":    round(float(g["price"].mean()),0)    if g["price"].notna().any() else None,
+                "min_price":    round(float(g["price"].min()),0)     if g["price"].notna().any() else None,
+                "max_price":    round(float(g["price"].max()),0)     if g["price"].notna().any() else None,
+                "avg_size":     round(float(g["size"].mean()),1)     if g["size"].notna().any()  else None,
+                "avg_price_m2": round(float(g["price_per_m2"].mean()),1) if g["price_per_m2"].notna().any() else None,
+            }).tolist() if "house_type" in _d_last.columns else []
+        ),
         "listing_trend": listing_trend.drop("period_ord",axis=1).to_dict(orient="records"),
         "unit_type_trend": ut_trend.drop("period_ord",axis=1).to_dict(orient="records"),
         "apt_trend":     apt_trend_records,
@@ -2027,15 +2045,13 @@ def search_listings(
                     and _haversine_km(c_lat, c_lng, r["lat"], r["lng"]) <= radius_km]
 
     # Per-unit-type stats from the apartment-level data (accurate counts + prices per type)
-    # Use only listing_ids that survived the radius filter, and only the latest period per listing
-    # (a sub-listing that changed type across periods must only be counted once with its latest type)
-    # Use deduplicated df (not _raw) to avoid duplicate rows with conflicting house_type values
+    # Use province-aware _is_latest flag (same as municipality endpoint) so listings that
+    # disappeared before the province's true latest period are correctly treated as sold.
+    # Use deduplicated df (not _raw) to avoid duplicate rows with conflicting house_type values.
     _radius_lids = set(r["listing_id"] for r in rows)
     _d_for_ut_all = df[df["listing_id"].isin(_radius_lids)] if _radius_lids else df.iloc[0:0]
-    # Keep only the latest observed period per listing
-    _latest_ord = _d_for_ut_all.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_max_ord"})
-    _d_for_ut = _d_for_ut_all.merge(_latest_ord, on="listing_id")
-    _d_for_ut = _d_for_ut[_d_for_ut["period_ord"] == _d_for_ut["_max_ord"]].drop("_max_ord", axis=1)
+    # Active = province-latest rows (not per-listing max, which misses listings absent from true latest)
+    _d_for_ut = _d_for_ut_all[_d_for_ut_all["_is_latest"] & _d_for_ut_all["listing_id"].isin(_radius_lids)]
 
     # Per-listing, per-unit-type counts for accurate frontend breakdown
     _lid_ut_counts = (
@@ -2062,10 +2078,10 @@ def search_listings(
     _prev_lid_ut_stats = {}
     _prev_lid_ht_map   = {}
     _sold_per_lid: dict = {}  # listing_id → count of truly-removed (sold) sub-listings
-    _d_prev_all_lids = _d_for_ut_all[_d_for_ut_all["listing_id"].isin(_all_result_lids)]
+    # Non-latest = all rows NOT in province latest period
+    _d_prev_all_lids = _d_for_ut_all[~_d_for_ut_all["_is_latest"]]
     _active_sub_cnt = _d_for_ut.groupby("listing_id")["sub_listing_id"].nunique().to_dict()
-    _prev_all_with_ord = _d_prev_all_lids.merge(_latest_ord.rename(columns={"_max_ord":"_latest_ord"}), on="listing_id")
-    _prev_all_non_latest = _prev_all_with_ord[_prev_all_with_ord["period_ord"] < _prev_all_with_ord["_latest_ord"]]
+    _prev_all_non_latest = _d_prev_all_lids  # already non-latest by _is_latest flag
     if not _prev_all_non_latest.empty:
         # All latest sub-listing ids (for truly-removed filter)
         _all_latest_sub_ids_df = (
