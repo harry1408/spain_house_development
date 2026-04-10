@@ -2117,8 +2117,14 @@ def search_listings(
     _d_for_ut = _d_for_ut_all[_d_for_ut_all["_is_latest"] & _d_for_ut_all["listing_id"].isin(_radius_lids)]
 
     # Per-listing, per-unit-type counts for accurate frontend breakdown
+    # When house_type filter is active, only count unit types from those house type sub-listings
+    _d_for_ut_ht = (
+        _d_for_ut[_d_for_ut["house_type"].isin(house_type)]
+        if house_type and "house_type" in _d_for_ut.columns
+        else _d_for_ut
+    )
     _lid_ut_counts = (
-        _d_for_ut.groupby(["listing_id","unit_type"])["sub_listing_id"]
+        _d_for_ut_ht.groupby(["listing_id","unit_type"])["sub_listing_id"]
         .nunique().reset_index(name="cnt")
     )
     _lid_ut_map = {}
@@ -2149,7 +2155,7 @@ def search_listings(
     # Per-listing per-unit-type price stats for active (latest) period
     _lid_ut_stats: dict = {}
     if "unit_type" in _d_for_ut.columns:
-        _active_price_agg = _d_for_ut[_d_for_ut["unit_type"].notna()].groupby(["listing_id","unit_type"]).agg(
+        _active_price_agg = _d_for_ut_ht[_d_for_ut_ht["unit_type"].notna()].groupby(["listing_id","unit_type"]).agg(
             avg_price=("price","mean"), min_price=("price","min"),
             max_price=("price","max"), avg_pm2=("price_per_m2","mean"), avg_size=("size","mean"),
         ).reset_index()
@@ -2181,8 +2187,14 @@ def search_listings(
         if _lids_with_sold:
             _d_prev_removed = _d_prev_removed_all[_d_prev_removed_all["listing_id"].isin(_lids_with_sold)]
             _d_prev_sold = _prev_all_non_latest[_prev_all_non_latest["listing_id"].isin(_lids_with_sold)]
+            # When house_type filter is active, restrict historical unit type counts to those house types
+            _d_prev_removed_ht = (
+                _d_prev_removed[_d_prev_removed["house_type"].isin(house_type)]
+                if house_type and "house_type" in _d_prev_removed.columns
+                else _d_prev_removed
+            )
             _prev_lid_ut_counts = (
-                _d_prev_removed[_d_prev_removed["unit_type"].notna()]
+                _d_prev_removed_ht[_d_prev_removed_ht["unit_type"].notna()]
                 .groupby(["listing_id","unit_type"])["sub_listing_id"]
                 .nunique().reset_index(name="cnt")
             )
@@ -2241,7 +2253,7 @@ def search_listings(
         _row["units"] = _active_cnt_s + _sold_s  # total = active + sold
 
     _ut_order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
-    _ut_agg = _d_for_ut.groupby("unit_type").agg(
+    _ut_agg = _d_for_ut_ht.groupby("unit_type").agg(
         count     =("sub_listing_id","nunique"),
         min_price =("price","min"),
         avg_price =("price","mean"),
@@ -2319,7 +2331,12 @@ def search_listings(
     # Per-unit-type stats for historical/sold sub-listings
     _prev_ut_agg = pd.DataFrame()
     if not _prev_all_non_latest.empty and not _d_prev_removed_all.empty:
-        _prev_removed_ut = _d_prev_removed_all[_d_prev_removed_all["unit_type"].notna()]
+        _prev_removed_ut_src = (
+            _d_prev_removed_all[_d_prev_removed_all["house_type"].isin(house_type)]
+            if house_type and "house_type" in _d_prev_removed_all.columns
+            else _d_prev_removed_all
+        )
+        _prev_removed_ut = _prev_removed_ut_src[_prev_removed_ut_src["unit_type"].notna()]
         if not _prev_removed_ut.empty:
             _prev_ut_agg = _prev_removed_ut.groupby("unit_type").agg(
                 count     =("sub_listing_id","nunique"),
