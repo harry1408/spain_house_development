@@ -779,10 +779,11 @@ def drilldown_municipality(municipality: str):
     # Previous period data for ALL listings in this municipality
     # sold = unique sub_listing_ids in non-latest periods that are NOT in latest period (truly removed)
     _all_lids = set(int(lid) for lid in listings_grp["listing_id"].unique())
-    _dd_prev_ut_map   = {}
-    _dd_prev_ut_stats = {}
-    _dd_prev_ht_map = {}
+    _dd_prev_ut_map        = {}
+    _dd_prev_ut_stats      = {}
+    _dd_prev_ht_map        = {}
     _dd_sold_per_lid: dict = {}  # listing_id → count of truly-removed (sold) sub-listings
+    _dd_d_prev_removed_all = pd.DataFrame()  # initialized here; populated below if historical data exists
     # Active sub-listing count per listing (always computed — used in sold calculation below)
     _dd_active_sub_cnt = dl.groupby("listing_id")["sub_listing_id"].nunique().to_dict()
     # Per-listing per-unit-type price stats for active (latest) period
@@ -856,7 +857,7 @@ def drilldown_municipality(municipality: str):
                     _sold_total = sum(_dd_prev_ut_map[_lid_s].values())
                     _ht_total   = sum(_active_ht.values()) or 1
                     for _ht, _ht_cnt in _active_ht.items():
-                        _dd_prev_ht_map[_lid_s][_ht] = round(_sold_total * _ht_cnt / _ht_total)
+                        _dd_prev_ht_map.setdefault(_lid_s, {})[_ht] = round(_sold_total * _ht_cnt / _ht_total)
 
     listings_records = listings_grp.to_dict(orient="records")
     for rec in listings_records:
@@ -878,11 +879,38 @@ def drilldown_municipality(municipality: str):
         rec["prev_total_units"] = _sold  # sold count only
         rec["units"] = _active_cnt + _sold  # total = active + sold
 
+    # Historical (sold) unit-type and house-type aggregates for fallback price stats
+    _dd_prev_ut_agg_df = pd.DataFrame()
+    _dd_prev_ht_agg_df = pd.DataFrame()
+    if _dd_d_prev_removed_all is not None and not _dd_d_prev_removed_all.empty:
+        _tmp_ut = _dd_d_prev_removed_all[_dd_d_prev_removed_all["unit_type"].notna()]
+        if not _tmp_ut.empty:
+            _dd_prev_ut_agg_df = _tmp_ut.groupby("unit_type").agg(
+                count=("sub_listing_id","nunique"), min_price=("price","min"),
+                avg_price=("price","mean"), max_price=("price","max"),
+                avg_size=("size","mean"), avg_pm2=("price_per_m2","mean"),
+            ).reset_index()
+            for _c in ["min_price","avg_price","max_price"]: _dd_prev_ut_agg_df[_c] = _dd_prev_ut_agg_df[_c].round(0)
+            _dd_prev_ut_agg_df["avg_size"] = _dd_prev_ut_agg_df["avg_size"].round(1)
+            _dd_prev_ut_agg_df["avg_pm2"]  = _dd_prev_ut_agg_df["avg_pm2"].round(0)
+        _tmp_ht = _dd_d_prev_removed_all[_dd_d_prev_removed_all["house_type"].notna() & (_dd_d_prev_removed_all["house_type"] != "")]
+        if not _tmp_ht.empty:
+            _dd_prev_ht_agg_df = _tmp_ht.groupby("house_type").agg(
+                count=("sub_listing_id","nunique"), min_price=("price","min"),
+                avg_price=("price","mean"), max_price=("price","max"),
+                avg_size=("size","mean"), avg_pm2=("price_per_m2","mean"),
+            ).reset_index()
+            for _c in ["min_price","avg_price","max_price"]: _dd_prev_ht_agg_df[_c] = _dd_prev_ht_agg_df[_c].round(0)
+            _dd_prev_ht_agg_df["avg_size"] = _dd_prev_ht_agg_df["avg_size"].round(1)
+            _dd_prev_ht_agg_df["avg_pm2"]  = _dd_prev_ht_agg_df["avg_pm2"].round(0)
+
     return safe_json({"listings": listings_records,
                       "stats": stats,
                       "unit_type_mix": mix.to_dict(orient="records"),
-                      "unit_type_stats": ut_stats.to_dict(orient="records"),
-                      "house_type_stats": ht_stats.to_dict(orient="records"),
+                      "unit_type_stats":      ut_stats.to_dict(orient="records"),
+                      "prev_unit_type_stats": _clean(_dd_prev_ut_agg_df.to_dict(orient="records")) if not _dd_prev_ut_agg_df.empty else [],
+                      "house_type_stats":      ht_stats.to_dict(orient="records"),
+                      "prev_house_type_stats": _clean(_dd_prev_ht_agg_df.to_dict(orient="records")) if not _dd_prev_ht_agg_df.empty else [],
                       "price_dist": price_dist.to_dict(orient="records"),
                       "m2_dist": m2_dist.to_dict(orient="records"),
                       "trend": trend.drop("period_ord",axis=1).to_dict(orient="records")})
@@ -2109,10 +2137,12 @@ def search_listings(
     # Previous period data for ALL result listings
     # sold = unique sub_listing_ids in non-latest periods that are NOT in latest period (truly removed)
     _all_result_lids = {int(r["listing_id"]) for r in rows}
-    _prev_lid_ut_map   = {}
-    _prev_lid_ut_stats = {}
-    _prev_lid_ht_map   = {}
-    _sold_per_lid: dict = {}  # listing_id → count of truly-removed (sold) sub-listings
+    _prev_lid_ut_map      = {}
+    _prev_lid_ut_stats    = {}
+    _prev_lid_ht_map      = {}
+    _sold_per_lid: dict   = {}  # listing_id → count of truly-removed (sold) sub-listings
+    _d_prev_removed_all   = pd.DataFrame()  # initialized here; populated below if historical data exists
+    _prev_all_non_latest  = pd.DataFrame()  # same
     # Non-latest = all rows NOT in province latest period
     _d_prev_all_lids = _d_for_ut_all[~_d_for_ut_all["_is_latest"]]
     _active_sub_cnt = _d_for_ut.groupby("listing_id")["sub_listing_id"].nunique().to_dict()
@@ -2192,7 +2222,7 @@ def search_listings(
                     _sold_total = sum(_prev_lid_ut_map[_lid_s].values())
                     _ht_total   = sum(_active_ht.values()) or 1
                     for _ht, _ht_cnt in _active_ht.items():
-                        _prev_lid_ht_map[_lid_s][_ht] = round(_sold_total * _ht_cnt / _ht_total)
+                        _prev_lid_ht_map.setdefault(_lid_s, {})[_ht] = round(_sold_total * _ht_cnt / _ht_total)
 
     # Attach unit_type_counts, house_type_counts and partial-delisted flag to each row
     for _row in rows:
@@ -2225,7 +2255,7 @@ def search_listings(
     _ut_agg["_s"] = _ut_agg["unit_type"].apply(lambda x: _ut_order.index(x) if x in _ut_order else 99)
     _ut_agg = _ut_agg.sort_values("_s").drop("_s", axis=1)
 
-    # Per-house-type stats (unit level)
+    # Per-house-type stats (unit level, active period)
     _ht_agg = _d_for_ut[_d_for_ut["house_type"].notna() & (_d_for_ut["house_type"] != "")].groupby("house_type").agg(
         count     =("sub_listing_id","nunique"),
         min_price =("price","min"),
@@ -2238,6 +2268,24 @@ def search_listings(
     _ht_agg["avg_size"] = _ht_agg["avg_size"].round(1)
     _ht_agg["avg_pm2"]  = _ht_agg["avg_pm2"].round(0)
     _ht_agg = _ht_agg.sort_values("count", ascending=False)
+    # Per-house-type stats for historical/sold sub-listings (fallback for types not in active period)
+    _prev_ht_agg = pd.DataFrame()
+    if not _prev_all_non_latest.empty:
+        _prev_removed_ht = _d_prev_removed_all[
+            _d_prev_removed_all["house_type"].notna() & (_d_prev_removed_all["house_type"] != "")
+        ] if not _d_prev_removed_all.empty else pd.DataFrame()
+        if not _prev_removed_ht.empty:
+            _prev_ht_agg = _prev_removed_ht.groupby("house_type").agg(
+                count     =("sub_listing_id","nunique"),
+                min_price =("price","min"),
+                avg_price =("price","mean"),
+                max_price =("price","max"),
+                avg_size  =("size","mean"),
+                avg_pm2   =("price_per_m2","mean"),
+            ).reset_index()
+            for _c in ["min_price","avg_price","max_price"]: _prev_ht_agg[_c] = _prev_ht_agg[_c].round(0)
+            _prev_ht_agg["avg_size"] = _prev_ht_agg["avg_size"].round(1)
+            _prev_ht_agg["avg_pm2"]  = _prev_ht_agg["avg_pm2"].round(0)
 
     # Determine area center for the frontend map
     area_center = None
@@ -2268,9 +2316,28 @@ def search_listings(
                 "lng": sum(c[1] for c in muni_coords) / len(muni_coords),
             }
 
+    # Per-unit-type stats for historical/sold sub-listings
+    _prev_ut_agg = pd.DataFrame()
+    if not _prev_all_non_latest.empty and not _d_prev_removed_all.empty:
+        _prev_removed_ut = _d_prev_removed_all[_d_prev_removed_all["unit_type"].notna()]
+        if not _prev_removed_ut.empty:
+            _prev_ut_agg = _prev_removed_ut.groupby("unit_type").agg(
+                count     =("sub_listing_id","nunique"),
+                min_price =("price","min"),
+                avg_price =("price","mean"),
+                max_price =("price","max"),
+                avg_size  =("size","mean"),
+                avg_pm2   =("price_per_m2","mean"),
+            ).reset_index()
+            for _c in ["min_price","avg_price","max_price"]: _prev_ut_agg[_c] = _prev_ut_agg[_c].round(0)
+            _prev_ut_agg["avg_size"] = _prev_ut_agg["avg_size"].round(1)
+            _prev_ut_agg["avg_pm2"]  = _prev_ut_agg["avg_pm2"].round(0)
+
     return safe_json({"listings": rows, "total": len(rows),
-                      "unit_type_stats": _clean(_ut_agg.to_dict(orient="records")),
-                      "house_type_stats": _clean(_ht_agg.to_dict(orient="records")),
+                      "unit_type_stats":      _clean(_ut_agg.to_dict(orient="records")),
+                      "prev_unit_type_stats": _clean(_prev_ut_agg.to_dict(orient="records")) if not _prev_ut_agg.empty else [],
+                      "house_type_stats":      _clean(_ht_agg.to_dict(orient="records")),
+                      "prev_house_type_stats": _clean(_prev_ht_agg.to_dict(orient="records")) if not _prev_ht_agg.empty else [],
                       "area_center": area_center})
 
 
