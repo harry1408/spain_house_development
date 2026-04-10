@@ -776,6 +776,18 @@ def drilldown_municipality(municipality: str):
     for _, _r in _dd_lid_ht.iterrows():
         _dd_lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
 
+    # Per-listing, per-house-type × per-unit-type cross-reference (active period)
+    # Allows frontend to accurately count unit types within a house type and vice versa
+    _dd_lid_ht_ut_map = {}
+    if "unit_type" in dl.columns and "house_type" in dl.columns:
+        _dd_ht_ut_grp = (
+            dl[dl["unit_type"].notna() & dl["house_type"].notna() & (dl["house_type"] != "")]
+            .groupby(["listing_id","house_type","unit_type"])["sub_listing_id"]
+            .nunique().reset_index(name="cnt")
+        )
+        for _, _r in _dd_ht_ut_grp.iterrows():
+            _dd_lid_ht_ut_map.setdefault(int(_r["listing_id"]), {}).setdefault(_r["house_type"], {})[_r["unit_type"]] = int(_r["cnt"])
+
     # Previous period data for ALL listings in this municipality
     # sold = unique sub_listing_ids in non-latest periods that are NOT in latest period (truly removed)
     _all_lids = set(int(lid) for lid in listings_grp["listing_id"].unique())
@@ -866,13 +878,15 @@ def drilldown_municipality(municipality: str):
         rec["lat"] = _lat
         rec["lng"] = _lng
         rec["nearest_beach_km"], rec["nearest_beach_name"] = _nearest_beach(lid, _lat, _lng)
-        rec["unit_type_counts"]       = _dd_lid_ut_map.get(lid, {})
-        rec["unit_type_stats"]        = _dd_ut_stats.get(lid, {})
-        rec["house_type_counts"]      = _dd_lid_ht_map.get(lid, {})
-        rec["is_partial_delisted"]    = lid in PARTIAL_DELISTED_IDS
-        rec["prev_unit_type_counts"]  = _dd_prev_ut_map.get(lid, {})
-        rec["prev_unit_type_stats"]   = _dd_prev_ut_stats.get(lid, {})
-        rec["prev_house_type_counts"] = _dd_prev_ht_map.get(lid, {})
+        rec["unit_type_counts"]            = _dd_lid_ut_map.get(lid, {})
+        rec["unit_type_stats"]             = _dd_ut_stats.get(lid, {})
+        rec["house_type_counts"]           = _dd_lid_ht_map.get(lid, {})
+        rec["house_type_unit_counts"]      = _dd_lid_ht_ut_map.get(lid, {})
+        rec["is_partial_delisted"]         = lid in PARTIAL_DELISTED_IDS
+        rec["prev_unit_type_counts"]       = _dd_prev_ut_map.get(lid, {})
+        rec["prev_unit_type_stats"]        = _dd_prev_ut_stats.get(lid, {})
+        rec["prev_house_type_counts"]      = _dd_prev_ht_map.get(lid, {})
+        rec["prev_house_type_unit_counts"] = {}  # populated below after historical data is computed
         # sold = truly removed sub-listings (in non-latest periods, not present in latest at all)
         _active_cnt = _dd_active_sub_cnt.get(lid, int(rec.get("units", 0)))
         _sold = _dd_sold_per_lid.get(lid, 0)
@@ -903,6 +917,37 @@ def drilldown_municipality(municipality: str):
             for _c in ["min_price","avg_price","max_price"]: _dd_prev_ht_agg_df[_c] = _dd_prev_ht_agg_df[_c].round(0)
             _dd_prev_ht_agg_df["avg_size"] = _dd_prev_ht_agg_df["avg_size"].round(1)
             _dd_prev_ht_agg_df["avg_pm2"]  = _dd_prev_ht_agg_df["avg_pm2"].round(0)
+
+    # Historical cross-reference: per-listing, per-house-type × per-unit-type (sold period)
+    _dd_lid_prev_ht_ut_map = {}
+    if not _dd_d_prev_removed_all.empty and "unit_type" in _dd_d_prev_removed_all.columns and "house_type" in _dd_d_prev_removed_all.columns:
+        _dd_prev_ht_ut_grp = (
+            _dd_d_prev_removed_all[
+                _dd_d_prev_removed_all["unit_type"].notna() &
+                _dd_d_prev_removed_all["house_type"].notna() &
+                (_dd_d_prev_removed_all["house_type"] != "")
+            ].groupby(["listing_id","house_type","unit_type"])["sub_listing_id"]
+            .nunique().reset_index(name="cnt")
+        )
+        for _, _r in _dd_prev_ht_ut_grp.iterrows():
+            _dd_lid_prev_ht_ut_map.setdefault(int(_r["listing_id"]), {}).setdefault(_r["house_type"], {})[_r["unit_type"]] = int(_r["cnt"])
+    # Fallback: sold sub-listings often lack house_type; distribute prev_unit_type_counts
+    # proportionally using the active cross-reference to fill prev_house_type_unit_counts
+    for _lid in _all_lids:
+        if _lid in _dd_prev_ut_map and _lid not in _dd_lid_prev_ht_ut_map:
+            _active_xref = _dd_lid_ht_ut_map.get(_lid, {})
+            if not _active_xref:
+                continue
+            _estimated: dict = {}
+            for _ut, _sold_cnt in _dd_prev_ut_map[_lid].items():
+                _ht_shares = {_ht: _active_xref[_ht].get(_ut, 0) for _ht in _active_xref if _ut in _active_xref[_ht]}
+                _total = sum(_ht_shares.values()) or 1
+                for _ht, _cnt in _ht_shares.items():
+                    _estimated.setdefault(_ht, {})[_ut] = round(_sold_cnt * _cnt / _total)
+            if _estimated:
+                _dd_lid_prev_ht_ut_map[_lid] = _estimated
+    for rec in listings_records:
+        rec["prev_house_type_unit_counts"] = _dd_lid_prev_ht_ut_map.get(int(rec["listing_id"]), {})
 
     # Add sold units to stats.total_units
     _dd_total_sold = int(_dd_d_prev_removed_all["sub_listing_id"].nunique()) if not _dd_d_prev_removed_all.empty else 0
@@ -2144,6 +2189,18 @@ def search_listings(
     for _, _r in _lid_ht_counts.iterrows():
         _lid_ht_map.setdefault(int(_r["listing_id"]), {})[_r["house_type"]] = int(_r["cnt"])
 
+    # Per-listing, per-house-type × per-unit-type cross-reference (active period, always unfiltered)
+    # Built from _d_for_ut (not _d_for_ut_ht) so frontend always gets the complete cross-reference
+    _lid_ht_ut_map = {}
+    if "unit_type" in _d_for_ut.columns and "house_type" in _d_for_ut.columns:
+        _ht_ut_grp = (
+            _d_for_ut[_d_for_ut["unit_type"].notna() & _d_for_ut["house_type"].notna() & (_d_for_ut["house_type"] != "")]
+            .groupby(["listing_id","house_type","unit_type"])["sub_listing_id"]
+            .nunique().reset_index(name="cnt")
+        )
+        for _, _r in _ht_ut_grp.iterrows():
+            _lid_ht_ut_map.setdefault(int(_r["listing_id"]), {}).setdefault(_r["house_type"], {})[_r["unit_type"]] = int(_r["cnt"])
+
     # Previous period data for ALL result listings
     # sold = unique sub_listing_ids in non-latest periods that are NOT in latest period (truly removed)
     _all_result_lids = {int(r["listing_id"]) for r in rows}
@@ -2240,16 +2297,48 @@ def search_listings(
                     for _ht, _ht_cnt in _active_ht.items():
                         _prev_lid_ht_map.setdefault(_lid_s, {})[_ht] = round(_sold_total * _ht_cnt / _ht_total)
 
+    # Historical cross-reference: per-listing per-house-type × per-unit-type (sold period)
+    _prev_lid_ht_ut_map = {}
+    if not _d_prev_removed_all.empty and "unit_type" in _d_prev_removed_all.columns and "house_type" in _d_prev_removed_all.columns:
+        _prev_ht_ut_grp = (
+            _d_prev_removed_all[
+                _d_prev_removed_all["unit_type"].notna() &
+                _d_prev_removed_all["house_type"].notna() &
+                (_d_prev_removed_all["house_type"] != "")
+            ].groupby(["listing_id","house_type","unit_type"])["sub_listing_id"]
+            .nunique().reset_index(name="cnt")
+        )
+        for _, _r in _prev_ht_ut_grp.iterrows():
+            _prev_lid_ht_ut_map.setdefault(int(_r["listing_id"]), {}).setdefault(_r["house_type"], {})[_r["unit_type"]] = int(_r["cnt"])
+
+    # Fallback: sold sub-listings often lack house_type; distribute prev_unit_type_counts
+    # proportionally using the active cross-reference to fill prev_house_type_unit_counts
+    for _lid in _all_result_lids:
+        if _lid in _prev_lid_ut_map and _lid not in _prev_lid_ht_ut_map:
+            _active_xref = _lid_ht_ut_map.get(_lid, {})
+            if not _active_xref:
+                continue
+            _estimated: dict = {}
+            for _ut, _sold_cnt in _prev_lid_ut_map[_lid].items():
+                _ht_shares = {_ht: _active_xref[_ht].get(_ut, 0) for _ht in _active_xref if _ut in _active_xref[_ht]}
+                _total = sum(_ht_shares.values()) or 1
+                for _ht, _cnt in _ht_shares.items():
+                    _estimated.setdefault(_ht, {})[_ut] = round(_sold_cnt * _cnt / _total)
+            if _estimated:
+                _prev_lid_ht_ut_map[_lid] = _estimated
+
     # Attach unit_type_counts, house_type_counts and partial-delisted flag to each row
     for _row in rows:
         _lid_int = int(_row["listing_id"])
-        _row["unit_type_counts"]       = _lid_ut_map.get(_lid_int, {})
-        _row["unit_type_stats"]        = _lid_ut_stats.get(_lid_int, {})
-        _row["house_type_counts"]      = _lid_ht_map.get(_lid_int, {})
-        _row["is_partial_delisted"]    = _lid_int in PARTIAL_DELISTED_IDS
-        _row["prev_unit_type_counts"]  = _prev_lid_ut_map.get(_lid_int, {})
-        _row["prev_unit_type_stats"]   = _prev_lid_ut_stats.get(_lid_int, {})
-        _row["prev_house_type_counts"] = _prev_lid_ht_map.get(_lid_int, {})
+        _row["unit_type_counts"]            = _lid_ut_map.get(_lid_int, {})
+        _row["unit_type_stats"]             = _lid_ut_stats.get(_lid_int, {})
+        _row["house_type_counts"]           = _lid_ht_map.get(_lid_int, {})
+        _row["house_type_unit_counts"]      = _lid_ht_ut_map.get(_lid_int, {})
+        _row["is_partial_delisted"]         = _lid_int in PARTIAL_DELISTED_IDS
+        _row["prev_unit_type_counts"]       = _prev_lid_ut_map.get(_lid_int, {})
+        _row["prev_unit_type_stats"]        = _prev_lid_ut_stats.get(_lid_int, {})
+        _row["prev_house_type_counts"]      = _prev_lid_ht_map.get(_lid_int, {})
+        _row["prev_house_type_unit_counts"] = _prev_lid_ht_ut_map.get(_lid_int, {})
         # sold = truly removed sub-listings (in non-latest periods, not present in latest at all)
         _active_cnt_s = _active_sub_cnt.get(_lid_int, int(_row.get("units", 0)))
         _sold_s = _sold_per_lid.get(_lid_int, 0)
