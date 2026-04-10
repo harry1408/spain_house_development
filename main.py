@@ -413,6 +413,7 @@ def get_stats(municipality: Optional[List[str]] = Query(None),
     cur["stated_unit_count"]  = _STATED_UNIT_COUNT
     cur["prev"] = _s(p) if p is not None else None
     cur["prev_period"] = PREV_PERIOD
+    cur["new_this_month"] = int(len(set(d["listing_id"].unique()) & set(_new_this_month_ids)))
     return cur
 
 @app.get("/charts/price-by-unit-type")
@@ -682,11 +683,13 @@ def drilldown_municipality(municipality: str):
     listings_grp["avg_size"]     = listings_grp["avg_size"].round(1)
     listings_grp["esg_grade"]    = listings_grp["esg_grade"].where(pd.notna(listings_grp["esg_grade"]), None)
 
+    _new_in_muni = int(len(set(dl["listing_id"].unique()) & set(_new_this_month_ids)))
     stats = {"total_units": int(dl["sub_listing_id"].nunique()),
              "total_listings": int(dl["listing_id"].nunique()),
              "avg_price":    round(float(dl["price"].mean())),
              "avg_price_m2": round(float(dl["price_per_m2"].mean()),1),
-             "price_range":  [int(dl["price"].min()), int(dl["price"].max())]}
+             "price_range":  [int(dl["price"].min()), int(dl["price"].max())],
+             "new_this_month": _new_in_muni}
 
     mix = dl.groupby("unit_type").size().reset_index(name="count")
     order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
