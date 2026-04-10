@@ -904,6 +904,10 @@ def drilldown_municipality(municipality: str):
             _dd_prev_ht_agg_df["avg_size"] = _dd_prev_ht_agg_df["avg_size"].round(1)
             _dd_prev_ht_agg_df["avg_pm2"]  = _dd_prev_ht_agg_df["avg_pm2"].round(0)
 
+    # Add sold units to stats.total_units
+    _dd_total_sold = int(_dd_d_prev_removed_all["sub_listing_id"].nunique()) if not _dd_d_prev_removed_all.empty else 0
+    stats["total_units"] += _dd_total_sold
+
     return safe_json({"listings": listings_records,
                       "stats": stats,
                       "unit_type_mix": mix.to_dict(orient="records"),
