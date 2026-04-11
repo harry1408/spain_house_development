@@ -227,6 +227,7 @@ if _desc_col:
     _STATED_UNIT_COUNT  = int(_latest_listings["_stated"].notna().sum())
     print(f"[data] Stated total units (from descriptions): {_STATED_TOTAL_UNITS:,} across {_STATED_UNIT_COUNT:,} listings")
 else:
+    _latest_listings = pd.DataFrame(columns=["listing_id", "_stated"])
     _STATED_TOTAL_UNITS = 0
     _STATED_UNIT_COUNT  = 0
 
@@ -415,8 +416,10 @@ def get_stats(municipality: Optional[List[str]] = Query(None),
                        "avg_size":     round(float(d["size"].mean()),1)  if len(d) else 0,
                        "total_developments": int(d["listing_id"].nunique())}
     cur = _s(d)
-    cur["total_stated_units"] = _STATED_TOTAL_UNITS
-    cur["stated_unit_count"]  = _STATED_UNIT_COUNT
+    _lids_in_d = set(d["listing_id"].unique())
+    _sl = _latest_listings[_latest_listings["listing_id"].isin(_lids_in_d)]
+    cur["total_stated_units"] = int(_sl["_stated"].dropna().sum())
+    cur["stated_unit_count"]  = int(_sl["_stated"].notna().sum())
     cur["prev"] = _s(p) if p is not None else None
     cur["prev_period"] = PREV_PERIOD
     cur["new_this_month"] = int(len(set(d["listing_id"].unique()) & set(_new_this_month_ids)))
@@ -1316,6 +1319,26 @@ def _build_listing_coords():
 
 LISTING_COORDS = _build_listing_coords()
 
+# Extended coord lookup: all active listings, falling back to municipality coords when no explicit coords.
+# Used by nearby endpoints so radius filter covers listings without GPS data in the Excel.
+def _build_all_listing_coords():
+    coords = dict(LISTING_COORDS)   # start with exact coords
+    _lid_muni = (
+        df[df["_is_latest"]]
+        .drop_duplicates("listing_id")[["listing_id","municipality"]]
+        .set_index("listing_id")["municipality"]
+        .to_dict()
+    )
+    for lid, muni in _lid_muni.items():
+        lid = int(lid)
+        if lid not in coords:
+            lat, lng = _get_coords(str(muni))
+            if lat and lng:
+                coords[lid] = {"lat": float(lat), "lng": float(lng)}
+    return coords
+
+ALL_LISTING_COORDS = _build_all_listing_coords()
+
 # Pre-compute partial-delisted listing IDs (still active but lost some sub-listings vs prev period)
 def _build_partial_delisted_ids():
     if not PREV_PERIOD:
@@ -1460,7 +1483,7 @@ def nearby_listings(listing_id: int, radius_km: Optional[float] = None):
     if radius_km and base_lat and base_lng:
         # Use only listings that have real coords (not fallback)
         nearby_ids = [
-            lid for lid, c in LISTING_COORDS.items()
+            lid for lid, c in ALL_LISTING_COORDS.items()
             if _haversine_km(base_lat, base_lng, c["lat"], c["lng"]) <= radius_km
         ]
         d = df[df["listing_id"].isin(nearby_ids) & df["_is_latest"]]
@@ -1507,7 +1530,7 @@ def nearby_apartments(listing_id: int, unit_type: Optional[str] = None, radius_k
 
     if radius_km and base_lat and base_lng:
         nearby_ids = [
-            lid for lid, c in LISTING_COORDS.items()
+            lid for lid, c in ALL_LISTING_COORDS.items()
             if _haversine_km(base_lat, base_lng, c["lat"], c["lng"]) <= radius_km
         ]
         d = df[df["listing_id"].isin(nearby_ids) & df["_is_latest"]].copy()
@@ -1521,7 +1544,8 @@ def nearby_apartments(listing_id: int, unit_type: Optional[str] = None, radius_k
     apt_cols = ["sub_listing_id","listing_id","property_name","municipality","unit_type",
                 "price","size","price_per_m2","floor","bedrooms","bathrooms",
                 "has_terrace","has_parking","has_pool","has_lift","has_ac","unit_url","city_area"]
-    if "last_updated" in d.columns: apt_cols = apt_cols + ["last_updated"]
+    if "house_type"    in d.columns: apt_cols = apt_cols + ["house_type"]
+    if "last_updated"  in d.columns: apt_cols = apt_cols + ["last_updated"]
     apts = d[apt_cols].drop_duplicates("sub_listing_id").copy()
     for col in ["bedrooms","bathrooms"]:
         apts[col] = pd.to_numeric(apts[col], errors="coerce").astype("Int64")
@@ -1557,7 +1581,7 @@ def nearby_apartments_trend(listing_id: int, unit_type: Optional[str] = None, ra
 
     if radius_km and base_lat and base_lng:
         nearby_ids = [
-            lid for lid, c in LISTING_COORDS.items()
+            lid for lid, c in ALL_LISTING_COORDS.items()
             if _haversine_km(base_lat, base_lng, c["lat"], c["lng"]) <= radius_km
         ]
         d = df[df["listing_id"].isin(nearby_ids)].copy()
@@ -2619,19 +2643,19 @@ def export_listings_excel(ids: str = Query(...)):
     def col(n): return get_column_letter(n)
 
     # Column layout:
-    # A-E  (1-5):  Property Name, Developer, City Area, Municipality, Province  [listing info]
-    # F-L  (6-12): Unit Type, House Type, Price (€), €/m², Floor, Beds, Bath   [per-unit]
-    # M-Q  (13-17): Delivery, ESG, Total Units, Latitude, Longitude             [listing tail]
-    # R    (18):   Link                                                          [per-unit]
-    # S    (19):   Description                                                   [merged rows]
+    # A-E  (1-5):  Property Name, Developer, City Area, Municipality, Province       [listing info]
+    # F-M  (6-13): Unit Type, House Type, Price (€), €/m², Size (m²), Floor, Beds, Bath [per-unit]
+    # N-R  (14-18): Delivery, ESG, Total Units, Latitude, Longitude                  [listing tail]
+    # S    (19):   Link                                                               [per-unit]
+    # T    (20):   Description                                                        [merged rows]
     NL   = 5   # listing prefix cols (A-E)
-    NAPT = 7   # per-unit cols (F-L): Unit Type, House Type, Price, €/m², Floor, Beds, Bath
-    NTAIL= 5   # listing tail cols (M-Q): Delivery, ESG, Total Units, Lat, Lng
-    NCOLS = NL + NAPT + NTAIL + 1 + 1  # = 19  (+Link +Description)
-    COL_LINK = NL + NAPT + NTAIL + 1   # col 18 = R
-    COL_DESC = NL + NAPT + NTAIL + 2   # col 19 = S
+    NAPT = 8   # per-unit cols (F-M): Unit Type, House Type, Price, €/m², Size (m²), Floor, Beds, Bath
+    NTAIL= 5   # listing tail cols (N-R): Delivery, ESG, Total Units, Lat, Lng
+    NCOLS = NL + NAPT + NTAIL + 1 + 1  # = 20  (+Link +Description)
+    COL_LINK = NL + NAPT + NTAIL + 1   # col 19 = S
+    COL_DESC = NL + NAPT + NTAIL + 2   # col 20 = T
 
-    APT_HEADERS  = ["Unit Type","House Type","Price (€)","€/m²","Floor","Beds","Bath"]
+    APT_HEADERS  = ["Unit Type","House Type","Price (€)","€/m²","Size (m²)","Floor","Beds","Bath"]
     TAIL_HEADERS = ["Delivery","ESG","Total Units","Latitude","Longitude"]
 
     import datetime as _dt
@@ -2731,22 +2755,26 @@ def export_listings_excel(ids: str = Query(...)):
                 c.font  = font(color="9AA0B4", size=9)
                 c.fill  = bg; c.border = border()
 
-            # Per-unit cols F-L: Unit Type, House Type, Price, €/m², Floor, Beds, Bath
+            # Per-unit cols F-M: Unit Type, House Type, Price, €/m², Size (m²), Floor, Beds, Bath
             apt_vals = [
                 apt["unit_type"], apt["house_type"],
                 apt["price"],     apt["pm2"],
+                apt["size"],
                 apt["floor"],     apt["bedrooms"], apt["bathrooms"],
             ]
             for ci, v in enumerate(apt_vals):
                 c = ws[f"{col(NL + ci + 1)}{row}"]
                 c.fill = bg; c.border = border()
-                is_price = ci == 2; is_pm2 = ci == 3
-                c.alignment = aln("right" if ci in (2,3,5,6) else "left")
+                is_price = ci == 2; is_pm2 = ci == 3; is_size = ci == 4
+                c.alignment = aln("right" if ci in (2,3,4,6,7) else "left")
                 if is_price and v:
                     c.value = v; c.number_format = "#,##0"
                     c.font  = font(bold=True, color=NAVY, size=10)
                 elif is_pm2 and v:
                     c.value = v; c.number_format = "#,##0"
+                    c.font  = font(color=DGREY, size=10)
+                elif is_size and v:
+                    c.value = v; c.number_format = "#,##0.0"
                     c.font  = font(color=DGREY, size=10)
                 elif ci == 0:
                     c.value = v; c.font = font(bold=True, color=NAVY, size=10)
@@ -2791,11 +2819,11 @@ def export_listings_excel(ids: str = Query(...)):
         row += 1
 
     # ── Column widths ─────────────────────────────────────────────────────
-    # A-E: listing prefix, F-L: per-unit, M-Q: tail, R: link, S: description
+    # A-E: listing prefix, F-M: per-unit, N-R: tail, S: link, T: description
     widths = [28, 20, 18, 16, 12,   # A-E
-              11, 16, 11,  9,  8, 6, 6,  # F-L
-              14,  8, 11, 13, 13,        # M-Q
-              35, 50]                    # R (link), S (description)
+              11, 16, 11,  9,  9, 8, 6, 6,  # F-M
+              14,  8, 11, 13, 13,        # N-R
+              35, 50]                    # S (link), T (description)
     for i, w in enumerate(widths):
         ws.column_dimensions[col(i+1)].width = w
 
