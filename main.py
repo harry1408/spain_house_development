@@ -487,39 +487,28 @@ def municipality_overview(municipality: Optional[List[str]] = Query(None),
                           house_type:   Optional[List[str]] = Query(None)):
     # Active listings — use _filter() exactly as the original endpoint did
     d_active = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
-    r = d_active.groupby("municipality").agg(
-        units       =("price","count"),
-        listings    =("listing_id","nunique"),
-        avg_price   =("price","mean"),
-        avg_price_m2=("price_per_m2","mean"),
-    ).reset_index()
 
-    # Sold units: sub-listings in non-latest periods whose sub_listing_id is NOT
-    # in the global active set (latest period across all municipalities).
-    # sub_listing_id IS globally unique — a unit still active anywhere is not sold.
-    # Skip when a specific period is requested (sold is ambiguous there).
-    if "sub_listing_id" in df.columns and not period:
-        # Only count sold units from listings that still have active units.
-        # Fully sold-out developments are excluded from the sold count.
-        _active_lid_set = set(d_active["listing_id"].astype(int).tolist())
-        d_all = _filter(municipality, unit_type, year, esg, None, province,
-                        house_type=house_type, all_periods=True)
-        d_hist = d_all[
-            ~d_all["_is_latest"] &
-            d_all["sub_listing_id"].notna() &
-            d_all["listing_id"].astype(int).isin(_active_lid_set)
-        ].copy()
-        if not d_hist.empty:
-            d_hist["_sid_i"] = d_hist["sub_listing_id"].astype(int)
-            d_sold = d_hist[~d_hist["_sid_i"].isin(_global_active_sub_ids)]
-            if not d_sold.empty:
-                sold_by_muni = (d_sold.groupby("municipality")["_sid_i"]
-                                .nunique().reset_index(name="sold_units"))
-                r = r.merge(sold_by_muni, on="municipality", how="left")
-                r["sold_units"] = r["sold_units"].fillna(0).astype(int)
-                r["units"] = r["units"] + r["sold_units"]
-                r = r.drop(columns=["sold_units"])
+    # Unit count per municipality (active sub-listings)
+    unit_counts = (
+        d_active.groupby("municipality")
+        .agg(units=("price", "count"), listings=("listing_id", "nunique"))
+        .reset_index()
+    )
 
+    # Per-listing averages first, then average across listings per municipality
+    # This matches the detail page which uses mean-of-listing-averages (development-weighted)
+    listing_avg = (
+        d_active.groupby(["municipality", "listing_id"])
+        .agg(avg_price=("price", "mean"), avg_price_m2=("price_per_m2", "mean"))
+        .reset_index()
+    )
+    muni_avg = (
+        listing_avg.groupby("municipality")
+        .agg(avg_price=("avg_price", "mean"), avg_price_m2=("avg_price_m2", "mean"))
+        .reset_index()
+    )
+
+    r = unit_counts.merge(muni_avg, on="municipality", how="left")
     r["avg_price"]    = r["avg_price"].round(0)
     r["avg_price_m2"] = r["avg_price_m2"].round(1)
     return safe_json(r.sort_values("units", ascending=False).to_dict(orient="records"))
@@ -569,15 +558,14 @@ def municipality_activity(province: Optional[List[str]] = Query(None),
         .head(15)
     )
 
-    # Sold-out listings: present in non-latest period but absent from latest period
-    has_latest     = set(d[d["_is_latest"]]["listing_id"].unique())
-    has_non_latest = set(d[~d["_is_latest"]]["listing_id"].unique())
-    fully_delisted = has_non_latest - has_latest
-    d_sold = d[d["listing_id"].isin(fully_delisted) & ~d["_is_latest"]]
-    # Take last known period per listing to get municipality
-    max_ords = d_sold.groupby("listing_id")["period_ord"].max().reset_index(name="_max")
-    d_sold = d_sold.merge(max_ords, on="listing_id")
-    d_sold = d_sold[d_sold["period_ord"] == d_sold["_max"]]
+    # Sold-out THIS period: present in prev period but absent from latest period
+    has_latest = set(d[d["_is_latest"]]["listing_id"].unique())
+    if PREV_PERIOD:
+        has_prev = set(d[d["period"] == PREV_PERIOD]["listing_id"].unique())
+        sold_this_period = has_prev - has_latest
+        d_sold = d[d["listing_id"].isin(sold_this_period) & (d["period"] == PREV_PERIOD)]
+    else:
+        d_sold = d.iloc[:0]  # empty
     sold_by_muni = (
         d_sold.groupby("municipality")["listing_id"]
         .nunique().reset_index(name="listings")
@@ -589,6 +577,30 @@ def municipality_activity(province: Optional[List[str]] = Query(None),
         "new_listings":  new_by_muni.to_dict(orient="records"),
         "sold_out":      sold_by_muni.to_dict(orient="records"),
     })
+
+@app.get("/charts/municipality-soldout-trend")
+def municipality_soldout_trend(province: Optional[List[str]] = Query(None),
+                               municipality: Optional[List[str]] = Query(None)):
+    """Sold-out listings per municipality per period (consecutive period diffs)."""
+    d = df.copy()
+    if province:     d = d[d["province"].isin(province)]
+    if municipality: d = d[d["municipality"].isin(municipality)]
+
+    rows = []
+    for i in range(1, len(PERIODS_SORTED)):
+        prev_p = PERIODS_SORTED[i - 1]
+        curr_p = PERIODS_SORTED[i]
+        has_prev = set(d[d["period"] == prev_p]["listing_id"].unique())
+        has_curr = set(d[d["period"] == curr_p]["listing_id"].unique())
+        sold = has_prev - has_curr
+        if not sold:
+            continue
+        d_sold = d[d["listing_id"].isin(sold) & (d["period"] == prev_p)]
+        by_muni = d_sold.groupby("municipality")["listing_id"].nunique().reset_index(name="listings")
+        for _, r in by_muni.iterrows():
+            rows.append({"period": curr_p, "municipality": str(r["municipality"]), "listings": int(r["listings"])})
+
+    return safe_json(rows)
 
 @app.get("/charts/esg-breakdown")
 def esg_breakdown(municipality: Optional[List[str]] = Query(None),
