@@ -125,6 +125,23 @@ _raw["province"] = _raw["province"].apply(lambda s: str(s).strip().title() if pd
 _full = _raw.copy()
 df = _raw.drop_duplicates(subset=["sub_listing_id","period"]).copy()
 
+# ── Normalise property names/developers to the latest-period value ─────────
+# The same listing_id can have slightly different property_name or developer
+# strings across months (typos, rebranding, etc.).  Using the raw name as a
+# groupby key creates phantom duplicate rows.  Map everything to the canonical
+# latest-period value so all endpoints are consistent.
+_latest_rows = df[df["period"] == df.groupby("listing_id")["period_ord"].transform("max")]
+for _col in ["property_name", "developer"]:
+    if _col in df.columns:
+        _canon = (
+            _latest_rows.drop_duplicates("listing_id")
+            .set_index("listing_id")[_col]
+            .to_dict()
+        )
+        df[_col] = df["listing_id"].map(_canon).fillna(df[_col])
+        _raw[_col] = _raw["listing_id"].map(_canon).fillna(_raw[_col])
+print("[data] Property names/developers normalised to latest-period values")
+
 PERIODS_SORTED = sorted(df["period"].unique(), key=lambda p: df[df["period"]==p]["period_ord"].iloc[0])
 LATEST_PERIOD  = "Apr 2026"   # Display label override — actual data period is PERIODS_SORTED[-1]
 _LATEST_DATA_PERIOD = PERIODS_SORTED[-1]   # Used for data queries
