@@ -569,9 +569,10 @@ def municipality_activity(province: Optional[List[str]] = Query(None),
     new_ids = set(_new_this_month_ids)
     d_new = d[d["listing_id"].isin(new_ids) & d["_is_latest"]]
     new_by_muni = (
-        d_new.groupby("municipality")["listing_id"]
-        .nunique().reset_index(name="listings")
-        .sort_values("listings", ascending=False)
+        d_new.groupby("municipality")
+        .agg(listings=("listing_id","nunique"), units=("sub_listing_id","nunique"))
+        .reset_index()
+        .sort_values("units", ascending=False)
         .head(15)
     )
 
@@ -1182,7 +1183,7 @@ def drilldown_listing(listing_id: int):
         "house_type_comparison": (
             _d_last[_d_last["house_type"].notna() & (_d_last["house_type"] != "")]
             .groupby("house_type").apply(lambda g: {
-                "house_type":   g["house_type"].iloc[0],
+                "house_type":   g.name,
                 "count":        int(len(g)),
                 "active_count": int((g["_status"] == "active").sum()),
                 "sold_count":   int((g["_status"] == "sold").sum()),
