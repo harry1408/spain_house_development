@@ -12,7 +12,6 @@ import shutil
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-
 app = FastAPI(title="Housing Dashboard API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -36,6 +35,7 @@ def serve_frontend():
 @app.get("/spain_new_frontend/{full_path:path}")
 def serve_frontend_routes(full_path: str):
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
 
 MONTH_ORDER = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,
                "Jul":7,"Aug":8,"Sep":9,"Oct":10,"Nov":11,"Dec":12}
@@ -87,11 +87,10 @@ if not _xlsx_files:
         f"Create a 'data/' folder next to main.py and drop your .xlsx files there."
     )
 
-# print(f"[data] Data dir : {_DATA_DIR}")
-# print(f"[data] Loading  : {[os.path.basename(f) for f in _xlsx_files]}")
-print("[]")
+print(f"[data] Data dir : {_DATA_DIR}")
+print(f"[data] Loading  : {[os.path.basename(f) for f in _xlsx_files]}")
 _raw = pd.concat([pd.read_excel(f) for f in _xlsx_files], ignore_index=True)
-# print(f"[data] Rows: {len(_raw):,}  |  provinces: {sorted(_raw['province'].dropna().unique().tolist())}")
+print(f"[data] Rows: {len(_raw):,}  |  provinces: {sorted(_raw['province'].dropna().unique().tolist())}")
 
 # Load expired_listing sheet: sub_listing → removed_date
 _EXPIRED_FILE = os.path.join(_DATA_DIR, "expired_listing.xlsx")
@@ -105,7 +104,7 @@ if os.path.exists(_EXPIRED_FILE):
         _expired_df["removed_date"] = pd.to_datetime(_expired_df["removed_date"], dayfirst=True, errors="coerce")
         _expired_df["removed_date_str"] = _expired_df["removed_date"].apply(
             lambda d: f"{d.day} {d.strftime('%b')} {d.year}" if pd.notna(d) else None)
-        # print(f"[data] Expired listings loaded: {len(_expired_df):,} rows")
+        print(f"[data] Expired listings loaded: {len(_expired_df):,} rows")
     except Exception as e:
         print(f"[data] Could not load expired_listing.xlsx: {e}")
 
@@ -132,7 +131,7 @@ if os.path.exists(_STREETS_CSV):
         _GEOCODED_STREETS["street"] = _GEOCODED_STREETS["street"].apply(
             lambda s: str(s).encode("latin1").decode("utf-8", errors="replace") if isinstance(s, str) else s
         )
-        # print(f"[data] Geocoded streets loaded: {len(_GEOCODED_STREETS):,}")
+        print(f"[data] Geocoded streets loaded: {len(_GEOCODED_STREETS):,}")
     except Exception as e:
         print(f"[data] Could not load geocoded streets: {e}")
 
@@ -170,7 +169,7 @@ for _col in ["property_name", "developer"]:
         )
         df[_col] = df["listing_id"].map(_canon).fillna(df[_col])
         _raw[_col] = _raw["listing_id"].map(_canon).fillna(_raw[_col])
-# print("[data] Property names/developers normalised to latest-period values")
+print("[data] Property names/developers normalised to latest-period values")
 
 PERIODS_SORTED = sorted(df["period"].unique(), key=lambda p: df[df["period"]==p]["period_ord"].iloc[0])
 LATEST_PERIOD  = "Apr 2026"   # Display label override — actual data period is PERIODS_SORTED[-1]
@@ -233,7 +232,7 @@ def _build_listing_expired_counts():
     return counts
 
 _listing_expired_counts = _build_listing_expired_counts()
-# print(f"[data] Listings with expired/sold sub-listings: {len(_listing_expired_counts)}")
+print(f"[data] Listings with expired/sold sub-listings: {len(_listing_expired_counts)}")
 
 _UNIT_COUNT_PATTERNS = [
     re.compile(r'development of\s+(\d+)\s+(?:homes?|apartments?|properties|residences?|units?|dwellings?|viviendas?)', re.I),
@@ -272,7 +271,7 @@ if _desc_col:
         lambda v: _extract_stated_units(str(v)) if pd.notna(v) else None)
     _STATED_TOTAL_UNITS = int(_latest_listings["_stated"].dropna().sum())
     _STATED_UNIT_COUNT  = int(_latest_listings["_stated"].notna().sum())
-    # print(f"[data] Stated total units (from descriptions): {_STATED_TOTAL_UNITS:,} across {_STATED_UNIT_COUNT:,} listings")
+    print(f"[data] Stated total units (from descriptions): {_STATED_TOTAL_UNITS:,} across {_STATED_UNIT_COUNT:,} listings")
 else:
     _latest_listings = pd.DataFrame(columns=["listing_id", "_stated"])
     _STATED_TOTAL_UNITS = 0
@@ -599,9 +598,10 @@ def municipality_activity(province: Optional[List[str]] = Query(None),
     new_ids = set(_new_this_month_ids)
     d_new = d[d["listing_id"].isin(new_ids) & d["_is_latest"]]
     new_by_muni = (
-        d_new.groupby("municipality")["listing_id"]
-        .nunique().reset_index(name="listings")
-        .sort_values("listings", ascending=False)
+        d_new.groupby("municipality")
+        .agg(listings=("listing_id","nunique"), units=("sub_listing_id","nunique"))
+        .reset_index()
+        .sort_values("units", ascending=False)
         .head(15)
     )
 
@@ -1212,7 +1212,7 @@ def drilldown_listing(listing_id: int):
         "house_type_comparison": (
             _d_last[_d_last["house_type"].notna() & (_d_last["house_type"] != "")]
             .groupby("house_type").apply(lambda g: {
-                "house_type":   g["house_type"].iloc[0],
+                "house_type":   g.name,
                 "count":        int(len(g)),
                 "active_count": int((g["_status"] == "active").sum()),
                 "sold_count":   int((g["_status"] == "sold").sum()),
@@ -1517,7 +1517,7 @@ if os.path.exists(_BEACH_DIST_FILE):
     try:
         with open(_BEACH_DIST_FILE) as _f:
             _BEACH_DISTANCES = {int(k): v for k, v in json.load(_f).items()}
-        # print(f"Loaded beach distances for {len(_BEACH_DISTANCES)} listings")
+        print(f"Loaded beach distances for {len(_BEACH_DISTANCES)} listings")
     except Exception as _e:
         print(f"Could not load beach_distances.json: {_e}")
 
@@ -3160,21 +3160,12 @@ def resolve_url(url: str):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-
 if __name__ == "__main__":
-    # SHAREPOINT_FILE_URL = "https://molnirre.sharepoint.com/:u:/r/sites/RunningEngine/Shared%20Documents/Housing%20Intelligence%20Tool/spain_housing.db?download=1"
-    # print("Connecting to db...")
+    # SHAREPOINT_FILE_URL = "https://molnirre.sharepoint.com/..."
     # response = requests.get(SHAREPOINT_FILE_URL)
-    # webbrowser.open(SHAREPOINT_FILE_URL)
     # if response.status_code==200:
     print("Starting FastAPI server...")
-    # threading.Timer(4, webbrowser.open(SHAREPOINT_FILE_URL)).start()
-    # downloads = os.path.join(os.path.expanduser("~"), "Downloads")
-    # source = os.path.join(downloads,"spain_housing.db")
-    # destination = os.path.join(os.getcwd(), "spain_housing.db")
-    # shutil.copy(source, destination)
     threading.Timer(3, webbrowser.open("http://localhost:8000/spain_new_frontend/")).start()
     uvicorn.run(app, host="127.0.0.1", port=8000)
     # else:
     #     print(response.status_code)
-    #     input("Failed to connect to db...")
