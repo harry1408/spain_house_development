@@ -801,6 +801,14 @@ def drilldown_municipality(municipality: str):
     if _dd_desc_col:
         _dd_agg["_desc_raw"] = (_dd_desc_col, "first")
     listings_grp = dl.groupby(["listing_id","property_name","developer","delivery_date","esg_grade"], dropna=False).agg(**_dd_agg).reset_index()
+    listings_grp = listings_grp[listings_grp["listing_id"].notna()].copy()
+    listings_grp["listing_id"] = listings_grp["listing_id"].astype(int)
+    # Drop listings whose only latest-period rows have null sub_listing_id (fully sold out)
+    listings_grp = listings_grp[listings_grp["units"] > 0].copy()
+    # Total unique sub-listings ever seen for each listing (across all periods)
+    _all_units = d.groupby("listing_id")["sub_listing_id"].nunique().reset_index(name="total_units_ever")
+    _all_units["listing_id"] = _all_units["listing_id"].astype(int)
+    listings_grp = listings_grp.merge(_all_units, on="listing_id", how="left")
     _dd_cols = dl.columns.tolist()
     if "_desc_raw" in listings_grp.columns:
         listings_grp["stated_total_units"] = listings_grp["_desc_raw"].apply(
@@ -1004,7 +1012,6 @@ def drilldown_municipality(municipality: str):
         rec["unit_type_stats"]             = _dd_ut_stats.get(lid, {})
         rec["house_type_counts"]           = _dd_lid_ht_map.get(lid, {})
         rec["house_type_unit_counts"]      = _dd_lid_ht_ut_map.get(lid, {})
-        rec["is_partial_delisted"]         = lid in PARTIAL_DELISTED_IDS
         rec["prev_unit_type_counts"]       = _dd_prev_ut_map.get(lid, {})
         rec["prev_unit_type_stats"]        = _dd_prev_ut_stats.get(lid, {})
         rec["prev_house_type_counts"]      = _dd_prev_ht_map.get(lid, {})
@@ -1013,7 +1020,15 @@ def drilldown_municipality(municipality: str):
         _active_cnt = _dd_active_sub_cnt.get(lid, int(rec.get("units", 0)))
         _sold = _dd_sold_per_lid.get(lid, 0)
         rec["prev_total_units"] = _sold  # sold count only
-        rec["units"] = _active_cnt + _sold  # total = active + sold
+        # Partial delisted: recent sub-listing loss (PARTIAL_DELISTED_IDS) OR
+        # sold units exist but active units have no type data ("phantom active" case)
+        _active_has_types = bool(_dd_lid_ut_map.get(lid))
+        rec["is_partial_delisted"] = (lid in PARTIAL_DELISTED_IDS) or (
+            _active_cnt > 0 and _sold > 0 and not _active_has_types
+        )
+        # Exclude phantom active sub-listings (no unit_type data) from the display count
+        _active_display = _active_cnt if _active_has_types else 0
+        rec["units"] = _active_display + _sold
 
     # Historical (sold) unit-type and house-type aggregates for fallback price stats
     _dd_prev_ut_agg_df = pd.DataFrame()
@@ -1209,19 +1224,18 @@ def drilldown_listing(listing_id: int):
         "apartments":    apt_records,
         "floor_price":   floor_price.to_dict(orient="records"),
         "unit_comparison": unit_comp,
-        "house_type_comparison": (
-            _d_last[_d_last["house_type"].notna() & (_d_last["house_type"] != "")]
-            .groupby("house_type").apply(lambda g: {
-                "house_type":   g.name,
-                "count":        int(len(g)),
-                "active_count": int((g["_status"] == "active").sum()),
-                "sold_count":   int((g["_status"] == "sold").sum()),
-                "avg_price":    round(float(g["price"].mean()),0)    if g["price"].notna().any() else None,
-                "min_price":    round(float(g["price"].min()),0)     if g["price"].notna().any() else None,
-                "max_price":    round(float(g["price"].max()),0)     if g["price"].notna().any() else None,
-                "avg_size":     round(float(g["size"].mean()),1)     if g["size"].notna().any()  else None,
-                "avg_price_m2": round(float(g["price_per_m2"].mean()),1) if g["price_per_m2"].notna().any() else None,
-            }).tolist() if "house_type" in _d_last.columns else []
+        "house_type_comparison": (lambda rows: rows)(
+            [{"house_type": ht,
+              "count":        int(len(g)),
+              "active_count": int((g["_status"] == "active").sum()),
+              "sold_count":   int((g["_status"] == "sold").sum()),
+              "avg_price":    round(float(g["price"].mean()),0)    if g["price"].notna().any() else None,
+              "min_price":    round(float(g["price"].min()),0)     if g["price"].notna().any() else None,
+              "max_price":    round(float(g["price"].max()),0)     if g["price"].notna().any() else None,
+              "avg_size":     round(float(g["size"].mean()),1)     if g["size"].notna().any()  else None,
+              "avg_price_m2": round(float(g["price_per_m2"].mean()),1) if g["price_per_m2"].notna().any() else None,
+             } for ht, g in _d_last[_d_last["house_type"].notna() & (_d_last["house_type"] != "")].groupby("house_type")]
+            if "house_type" in _d_last.columns else []
         ),
         "listing_trend": listing_trend.drop("period_ord",axis=1).to_dict(orient="records"),
         "unit_type_trend": ut_trend.drop("period_ord",axis=1).to_dict(orient="records"),
@@ -1697,9 +1711,9 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
     if municipality: d = d[d["municipality"].isin(municipality)]
 
     # Per-province aware: a listing is fully delisted if it has rows in a non-latest period
-    # but no rows in its province's latest period
-    has_latest     = set(d[d["_is_latest"]]["listing_id"].unique())
-    has_non_latest = set(d[~d["_is_latest"]]["listing_id"].unique())
+    # but no rows with a valid sub_listing_id in its province's latest period
+    has_latest     = set(d[d["_is_latest"] & d["sub_listing_id"].notna()]["listing_id"].unique())
+    has_non_latest = set(d[~d["_is_latest"] & d["sub_listing_id"].notna()]["listing_id"].unique())
     fully_delisted = has_non_latest - has_latest
 
     # Partially delisted: still in latest period but lost some sub_listings vs previous period
@@ -1710,8 +1724,8 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
         prev_period_ord = d_prev["period_ord"].max()
         d_prev_last = d_prev[d_prev["period_ord"] == prev_period_ord]
         for lid in has_latest:
-            prev_subs   = set(d_prev_last[d_prev_last["listing_id"] == lid]["sub_listing_id"].unique())
-            latest_subs = set(d_latest[d_latest["listing_id"] == lid]["sub_listing_id"].unique())
+            prev_subs   = set(d_prev_last[d_prev_last["listing_id"] == lid]["sub_listing_id"].dropna().unique())
+            latest_subs = set(d_latest[d_latest["listing_id"] == lid]["sub_listing_id"].dropna().unique())
             if prev_subs and (prev_subs - latest_subs):
                 partial_delisted.add(lid)
 
@@ -2472,16 +2486,25 @@ def search_listings(
         _row["unit_type_stats"]             = _lid_ut_stats.get(_lid_int, {})
         _row["house_type_counts"]           = _lid_ht_map.get(_lid_int, {})
         _row["house_type_unit_counts"]      = _lid_ht_ut_map.get(_lid_int, {})
-        _row["is_partial_delisted"]         = _lid_int in PARTIAL_DELISTED_IDS
         _row["prev_unit_type_counts"]       = _prev_lid_ut_map.get(_lid_int, {})
         _row["prev_unit_type_stats"]        = _prev_lid_ut_stats.get(_lid_int, {})
         _row["prev_house_type_counts"]      = _prev_lid_ht_map.get(_lid_int, {})
         _row["prev_house_type_unit_counts"] = _prev_lid_ht_ut_map.get(_lid_int, {})
         # sold = truly removed sub-listings (in non-latest periods, not present in latest at all)
-        _active_cnt_s = _active_sub_cnt.get(_lid_int, int(_row.get("units", 0)))
+        _active_cnt_s = _active_sub_cnt.get(_lid_int, 0)
         _sold_s = _sold_per_lid.get(_lid_int, 0)
         _row["prev_total_units"] = _sold_s  # sold count only
-        _row["units"] = _active_cnt_s + _sold_s  # total = active + sold
+        # Partial delisted: recent sub-listing loss OR sold units with no active type data
+        _active_has_types_s = bool(_lid_ut_map.get(_lid_int))
+        _row["is_partial_delisted"] = (_lid_int in PARTIAL_DELISTED_IDS) or (
+            _active_cnt_s > 0 and _sold_s > 0 and not _active_has_types_s
+        )
+        # Exclude phantom active sub-listings (no unit_type data) from the display count
+        _active_display_s = _active_cnt_s if _active_has_types_s else 0
+        _row["units"] = _active_display_s + _sold_s
+
+    # Remove fully sold-out listings — no active typed units, only sold history
+    rows = [r for r in rows if r.get("unit_type_counts")]
 
     _ut_order = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
     _ut_agg = _d_for_ut_ht.groupby("unit_type").agg(
