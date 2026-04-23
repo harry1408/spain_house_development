@@ -1795,6 +1795,7 @@ def delisted_listings(province: Optional[List[str]] = Query(None),
         lat, lng, map_url = _listing_coords(int(r["listing_id"]), str(r["municipality"]))
         r["lat"] = lat or 39.47
         r["lng"] = lng or -0.38
+        r["lat_exact"] = int(r["listing_id"]) in LISTING_COORDS
         r["sold_date"] = _listing_sold_date(int(r["listing_id"]))
         r["unit_type_counts"]  = _dl_lid_ut_map.get(int(r["listing_id"]), {})
         r["house_type_counts"] = _dl_lid_ht_map.get(int(r["listing_id"]), {})
@@ -2290,7 +2291,8 @@ def search_listings(
     for _, r in grp.iterrows():
         lid = int(r["listing_id"])
         lat_v, lng_v, _ = _listing_coords(lid, r["municipality"])
-        row = {**{k: _clean(v) for k, v in r.items() if k != "_desc_raw"}, "lat": lat_v, "lng": lng_v}
+        row = {**{k: _clean(v) for k, v in r.items() if k != "_desc_raw"}, "lat": lat_v, "lng": lng_v,
+               "lat_exact": lid in LISTING_COORDS}
         row["esg_grade"] = _parse_esg_grade(r.get("esg_certificate", ""))
         row["stated_total_units"] = _extract_stated_units(str(r["_desc_raw"])) if "_desc_raw" in r.index and pd.notna(r.get("_desc_raw")) else None
         row["nearest_beach_km"], row["nearest_beach_name"] = _nearest_beach(lid, lat_v, lng_v)
