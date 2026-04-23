@@ -2921,8 +2921,8 @@ def export_delisted_excel():
     export_date = _dt.datetime.now().strftime("%d %B %Y")
 
     d = df.copy()
-    has_latest     = set(d[d["_is_latest"]]["listing_id"].unique())
-    has_non_latest = set(d[~d["_is_latest"]]["listing_id"].unique())
+    has_latest     = set(d[d["_is_latest"] & d["sub_listing_id"].notna()]["listing_id"].unique())
+    has_non_latest = set(d[~d["_is_latest"] & d["sub_listing_id"].notna()]["listing_id"].unique())
     delisted_ids   = has_non_latest - has_latest
     if not delisted_ids:
         return JSONResponse({"error": "No sold-out properties found"}, status_code=404)
@@ -2962,7 +2962,6 @@ def export_delisted_excel():
                     "Avg Price (€)","Avg €/m²","Min Price (€)","Max Price (€)","Avg Size (m²)"]
     NC1 = len(LISTING_COLS)
 
-    # Title
     ws1.merge_cells(f"A1:{col(NC1)}1")
     c = ws1["A1"]
     c.value = "Sold Out Properties — Spain Housing Intelligence"
@@ -2971,11 +2970,10 @@ def export_delisted_excel():
 
     ws1.merge_cells(f"A2:{col(NC1)}2")
     c = ws1["A2"]
-    c.value = f"Developments no longer listed as of {SOLD_DATE} | Exported {export_date}"
+    c.value = f"Developments no longer listed as of {LATEST_PERIOD} | Exported {export_date}"
     c.font = Font(name=FONT, size=10, italic=True, color=DGREY)
     c.fill = fill("FFF1F1"); c.alignment = aln(); ws1.row_dimensions[2].height = 16
 
-    # Headers
     ws1.row_dimensions[3].height = 26
     for i, h in enumerate(LISTING_COLS):
         c = ws1[f"{col(i+1)}3"]
@@ -2983,7 +2981,6 @@ def export_delisted_excel():
         c.fill = fill(RED); c.alignment = aln("center", wrap=True); c.border = bdr()
     ws1.freeze_panes = "A4"
 
-    # Data
     listings_meta = d_snap.groupby("listing_id").first().reset_index()
     listings_agg  = d_snap.groupby("listing_id").agg(
         units=("sub_listing_id","nunique"),
@@ -3026,7 +3023,7 @@ def export_delisted_excel():
             if is_price and v:
                 c.number_format = "#,##0"
                 c.font = font(color=RED if ci in (10,11) else DGREY, size=9)
-            elif ci == 8:  # Sold Date
+            elif ci == 8:
                 c.font = font(bold=True, color=RED, size=9)
             else:
                 c.font = font(color=DGREY, size=9)
@@ -3054,7 +3051,7 @@ def export_delisted_excel():
 
     ws2.merge_cells(f"A2:{col(NC2)}2")
     c = ws2["A2"]
-    c.value = f"Individual apartment records for all sold-out developments | Sold Date: {SOLD_DATE} | Exported {export_date}"
+    c.value = f"Individual apartment records for all sold-out developments | Sold Date: {LATEST_PERIOD} | Exported {export_date}"
     c.font = Font(name=FONT, size=10, italic=True, color=DGREY)
     c.fill = fill("FFF1F1"); c.alignment = aln(); ws2.row_dimensions[2].height = 16
 
@@ -3102,9 +3099,9 @@ def export_delisted_excel():
             if ci in (9,10) and v:
                 c.number_format = "#,##0"
                 c.font = font(bold=(ci==9), color=RED if ci==9 else DGREY, size=9)
-            elif ci == 2:  # Sold Date
+            elif ci == 2:
                 c.font = font(bold=True, color=RED, size=9)
-            elif ci == 16 and url:  # Link
+            elif ci == 16 and url:
                 c.hyperlink = url
                 c.font = Font(name=FONT, color="0563C1", underline="single", size=9)
             else:
@@ -3144,6 +3141,389 @@ def export_by_filter(
     class _FakeQuery:
         pass
     return export_listings_excel(ids=ids_str)
+
+
+@app.get("/summary/export")
+def export_summary_excel(
+    municipality: Optional[List[str]] = Query(None),
+    province:     Optional[List[str]] = Query(None),
+    unit_type:    Optional[List[str]] = Query(None),
+    year:         Optional[List[str]] = Query(None),
+    esg:          Optional[List[str]] = Query(None),
+    house_type:   Optional[List[str]] = Query(None),
+):
+    """Sheet 1 = active listings in analysis format; Sheet 2 = sold-out listings."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        return JSONResponse({"error": "openpyxl not installed"}, status_code=500)
+
+    import datetime as _dt
+    export_date = _dt.datetime.now().strftime("%d %B %Y")
+
+    NAVY  = "0B1239"; DGREY = "3A4A6B"; LGREY = "F2F4F6"
+    RED   = "7F1D1D"; FONT  = "Aptos Narrow"
+    AME_COLS = [("has_lift","Lift"),("has_parking","Parking"),("has_pool","Pool"),
+                ("has_garden","Garden"),("has_ac","AC"),("has_storage","Storage"),
+                ("has_terrace","Terrace"),("has_wardrobes","Wardrobes")]
+    UT_ORDER = {"Studio":0,"1BR":1,"2BR":2,"3BR":3,"4BR":4,"5BR":5,"Penthouse":6}
+
+    def fill(hex_): return PatternFill("solid", fgColor=hex_)
+    def font(bold=False, color="000000", size=10, italic=False, underline=None):
+        return Font(name=FONT, bold=bold, color=color, size=size, italic=italic, underline=underline)
+    def aln(h="left", v="center", wrap=False):
+        return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+    thin = Side(style="thin", color="D0D4DE")
+    def border(): return Border(bottom=thin)
+    def col(n): return get_column_letter(n)
+
+    # ── Collect active listing IDs from filters ───────────────────────────
+    d_active = _filter(municipality, unit_type, year, esg, None, province, house_type=house_type)
+    active_ids = sorted(d_active["listing_id"].dropna().unique().astype(int).tolist())
+
+    # ── Build per-listing data (same logic as /search/export) ─────────────
+    listings_data = []
+    for lid in active_ids:
+        d = df[df["listing_id"] == lid]
+        if d.empty: continue
+        latest = d[d["_is_latest"]]
+        if latest.empty: latest = d
+        meta = latest.iloc[0]
+        esg_val = str(meta.get("esg_certificate","")) if pd.notna(meta.get("esg_certificate","")) else ""
+        ht = ", ".join(sorted(t for t in latest["house_type"].dropna().unique() if t)) if "house_type" in latest.columns else ""
+        amenities = [lbl for c_,lbl in AME_COLS if c_ in latest.columns and latest[c_].any()]
+        apt_cols = ["sub_listing_id","unit_type","price","size","price_per_m2","floor","floor_num","bedrooms","bathrooms","unit_url"]
+        for ac in ["house_type","has_terrace","has_parking","has_pool","has_garden","has_lift","has_ac","has_storage","has_wardrobes"]:
+            if ac in latest.columns: apt_cols.append(ac)
+        apts_df = latest[[c_ for c_ in apt_cols if c_ in latest.columns]].drop_duplicates("sub_listing_id").copy()
+        apts_df["_s"] = apts_df["unit_type"].map(lambda x: UT_ORDER.get(x, 99))
+        apts_df = apts_df.sort_values(["_s","price"]).drop("_s", axis=1)
+        apts = []
+        for _, a in apts_df.iterrows():
+            if pd.isna(a.get("sub_listing_id")): continue
+            apt_ame = [lbl for c_,lbl in AME_COLS if c_ in a.index and bool(a.get(c_))]
+            apts.append({
+                "unit_type":  str(a.get("unit_type","")) if pd.notna(a.get("unit_type")) else "",
+                "house_type": str(a.get("house_type","")) if "house_type" in a.index and pd.notna(a.get("house_type")) else "",
+                "floor":      str(a.get("floor","")) if pd.notna(a.get("floor")) else "",
+                "bedrooms":   int(a["bedrooms"])  if pd.notna(a.get("bedrooms"))  else None,
+                "bathrooms":  int(a["bathrooms"]) if pd.notna(a.get("bathrooms")) else None,
+                "size":       round(float(a["size"]),1) if pd.notna(a.get("size")) else None,
+                "price":      int(round(a["price"])) if pd.notna(a.get("price")) else None,
+                "pm2":        int(round(a["price_per_m2"])) if pd.notna(a.get("price_per_m2")) else None,
+                "amenities":  "; ".join(apt_ame),
+                "url":        str(a["unit_url"]) if "unit_url" in a.index and pd.notna(a.get("unit_url")) else "",
+            })
+        if not apts: continue
+        _lat, _lng, _ = _listing_coords(lid, str(meta.get("municipality","")))
+        _lat_exact = _lat is not None
+        if _lat is None: _lat = 39.47
+        if _lng is None: _lng = -0.38
+        desc_raw = next((str(meta[c]) for c in ["description","property_description","descripcion","desc","comments"]
+                         if c in d.columns and pd.notna(meta.get(c))), "")
+        for _sl in ["This comment was automatically translated and may not be 100% accurate.",
+                    "See description in the original language"]:
+            desc_raw = desc_raw.replace(_sl, "")
+        listings_data.append({
+            "property_name": str(meta.get("property_name","")),
+            "developer":     str(meta.get("developer","")) if pd.notna(meta.get("developer")) else "",
+            "city_area":     str(meta.get("city_area","")) if pd.notna(meta.get("city_area")) else "",
+            "municipality":  str(meta.get("municipality","")),
+            "province":      str(meta.get("province","")),
+            "house_type":    ht,
+            "delivery_date": str(meta.get("delivery_date","")).replace("Delivery : ",""),
+            "esg":           esg_val,
+            "amenities":     "; ".join(amenities),
+            "description":   desc_raw.strip(),
+            "total_units":   len(apts),
+            "apartments":    apts,
+            "lat":           round(_lat, 6), "lng": round(_lng, 6),
+            "lat_exact":     _lat_exact,
+        })
+
+    # ── Sheet 1: Active listings (analysis format) ────────────────────────
+    wb = openpyxl.Workbook()
+    ws1 = wb.active
+    ws1.title = "Active Listings"
+
+    NL=5; NAPT=8; NTAIL=5
+    NCOLS = NL + NAPT + NTAIL + 2
+    COL_LINK = NL + NAPT + NTAIL + 1
+    COL_DESC = NL + NAPT + NTAIL + 2
+
+    ws1.merge_cells(f"A1:{col(NCOLS)}1")
+    c = ws1["A1"]
+    c.value = "New Construction Projects — Spain Housing Intelligence"
+    c.font = Font(name=FONT, bold=True, size=15, color=NAVY)
+    c.alignment = aln(); ws1.row_dimensions[1].height = 28
+
+    ws1.merge_cells(f"A2:{col(NCOLS)}2")
+    c = ws1["A2"]
+    c.value = f"Residential new-build developments | Unit-level pricing & specifications | Snapshot: {LATEST_PERIOD} | Exported {export_date}"
+    c.font = Font(name=FONT, size=10, italic=True, color="6B7A9F")
+    c.fill = fill("F5F7FC"); c.alignment = aln(); ws1.row_dimensions[2].height = 18
+
+    ws1.row_dimensions[3].height = 30
+    all_headers = ["Property Name","Developer","City Area","Municipality","Province",
+                   "Unit Type","House Type","Price (€)","€/m²","Size (m²)","Floor","Beds","Bath",
+                   "Delivery","ESG","Total Units","Latitude","Longitude","Link","Description"]
+    for i, h in enumerate(all_headers):
+        c = ws1[f"{col(i+1)}3"]
+        c.value = h; c.font = font(bold=True, color="FFFFFF", size=9)
+        if i < NL:              c.fill = fill(NAVY)
+        elif i < NL+NAPT:       c.fill = fill(DGREY)
+        elif i < NL+NAPT+NTAIL+1: c.fill = fill("1A3060")
+        else:                   c.fill = fill("2A3F6F")
+        c.alignment = aln("center", wrap=True); c.border = border()
+    ws1.freeze_panes = "A4"
+
+    row = 4
+    for ld in listings_data:
+        apts = ld["apartments"]; n_apt = len(apts)
+        bg_l = fill("2A3F6F"); bg_a0 = fill(LGREY); bg_a1 = fill("FFFFFF")
+        lat_lbl = str(ld["lat"]) if ld["lat_exact"] else f"~{ld['lat']} (approx)"
+        lng_lbl = str(ld["lng"]) if ld["lat_exact"] else f"~{ld['lng']} (approx)"
+        prefix_vals = [ld["property_name"],ld["developer"],ld["city_area"],ld["municipality"],ld["province"]]
+        tail_vals   = [ld["delivery_date"],ld["esg"],f"{n_apt} units",lat_lbl,lng_lbl]
+        ws1.row_dimensions[row].height = 18
+        for ci, v in enumerate(prefix_vals):
+            c = ws1[f"{col(ci+1)}{row}"]
+            c.value = v; c.font = font(bold=True, color="FFFFFF", size=10); c.fill = bg_l; c.alignment = aln("left")
+        for ci in range(NL, NL+NAPT):
+            ws1[f"{col(ci+1)}{row}"].fill = bg_l
+        for ci, v in enumerate(tail_vals):
+            c = ws1[f"{col(NL+NAPT+ci+1)}{row}"]
+            c.value = v; c.font = font(bold=True, color="FFFFFF", size=10); c.fill = bg_l; c.alignment = aln("left")
+        c = ws1[f"{col(COL_LINK)}{row}"]
+        c.value = f'Amenities: {ld["amenities"]}' if ld["amenities"] else ""
+        c.font = font(bold=False, color="C5CBE9", size=9, italic=True); c.fill = bg_l
+        ws1[f"{col(COL_DESC)}{row}"].fill = bg_l
+        header_row = row; row += 1
+        apt_start = row
+        for ai, apt in enumerate(apts):
+            ws1.row_dimensions[row].height = 14
+            bg = bg_a0 if ai % 2 == 0 else bg_a1
+            for ci, v in enumerate(prefix_vals):
+                c = ws1[f"{col(ci+1)}{row}"]
+                c.value = v if ci == 0 else ""; c.font = font(color="9AA0B4", size=9); c.fill = bg; c.border = border()
+            apt_vals = [apt["unit_type"],apt["house_type"],apt["price"],apt["pm2"],apt["size"],apt["floor"],apt["bedrooms"],apt["bathrooms"]]
+            for ci, v in enumerate(apt_vals):
+                c = ws1[f"{col(NL+ci+1)}{row}"]
+                c.fill = bg; c.border = border()
+                c.alignment = aln("right" if ci in (2,3,4,6,7) else "left")
+                if ci == 2 and v:   c.value = v; c.number_format = "#,##0"; c.font = font(bold=True, color=NAVY, size=10)
+                elif ci == 3 and v: c.value = v; c.number_format = "#,##0"; c.font = font(color=DGREY, size=10)
+                elif ci == 4 and v: c.value = v; c.number_format = "#,##0.0"; c.font = font(color=DGREY, size=10)
+                elif ci == 0:       c.value = v; c.font = font(bold=True, color=NAVY, size=10)
+                else:               c.value = v; c.font = font(color=DGREY, size=9)
+            for ci, v in enumerate(tail_vals):
+                c = ws1[f"{col(NL+NAPT+ci+1)}{row}"]
+                c.value = v if ai == 0 else ""; c.font = font(color="9AA0B4", size=9)
+                c.fill = bg; c.border = border(); c.alignment = aln("left")
+            c = ws1[f"{col(COL_LINK)}{row}"]
+            c.fill = bg; c.border = border()
+            if apt["url"]:
+                c.value = apt["url"]; c.hyperlink = apt["url"]
+                c.font = Font(name=FONT, color="0563C1", underline="single", size=9)
+            ws1[f"{col(COL_DESC)}{row}"].fill = bg_a0; ws1[f"{col(COL_DESC)}{row}"].border = border()
+            row += 1
+        apt_end = row - 1
+        if ld.get("description") and n_apt > 0:
+            if apt_end > header_row:
+                ws1.merge_cells(f"{col(COL_DESC)}{header_row}:{col(COL_DESC)}{apt_end}")
+            c = ws1[f"{col(COL_DESC)}{header_row}"]
+            c.value = ld["description"]; c.font = Font(name=FONT, size=9, italic=True, color="6B7A9F")
+            c.fill = fill("F5F7FC"); c.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+        for ci in range(NCOLS):
+            ws1[f"{col(ci+1)}{row}"].fill = fill("FFFFFF")
+        row += 1
+
+    for i, w in enumerate([28,20,18,16,12, 11,16,11,9,9,8,6,6, 14,8,11,13,13, 35,50]):
+        ws1.column_dimensions[col(i+1)].width = w
+
+    # ── Sheet 2: Sold-out listings ────────────────────────────────────────
+    ws2 = wb.create_sheet("Sold Out")
+
+    d_all = df.copy()
+    if province:     d_all = d_all[d_all["province"].isin(province)]
+    if municipality: d_all = d_all[d_all["municipality"].isin(municipality)]
+    if unit_type:    d_all = d_all[d_all["unit_type"].isin(unit_type)]
+    if year:         d_all = d_all[d_all["delivery_year"].isin([int(y) for y in year])]
+    if esg:          d_all = d_all[d_all["esg_grade"].isin(esg)]
+    if house_type and "house_type" in d_all.columns:
+        d_all = d_all[d_all["house_type"].isin(house_type)]
+
+    has_latest     = set(d_all[d_all["_is_latest"] & d_all["sub_listing_id"].notna()]["listing_id"].unique())
+    has_non_latest = set(d_all[~d_all["_is_latest"] & d_all["sub_listing_id"].notna()]["listing_id"].unique())
+    sold_out_ids   = has_non_latest - has_latest
+
+    S_COLS = ["Property Name","Developer","Municipality","Province","City Area",
+              "House Type","ESG","Last Seen Period","Sold Date","Total Units",
+              "Avg Price (€)","Avg €/m²","Min Price (€)","Max Price (€)","Avg Size (m²)"]
+    NS = len(S_COLS)
+
+    ws2.merge_cells(f"A1:{col(NS)}1")
+    c = ws2["A1"]
+    c.value = "Sold Out Properties — Spain Housing Intelligence"
+    c.font = Font(name=FONT, bold=True, size=14, color=RED)
+    c.alignment = aln(); ws2.row_dimensions[1].height = 26
+
+    ws2.merge_cells(f"A2:{col(NS)}2")
+    c = ws2["A2"]
+    c.value = f"Developments no longer listed as of {LATEST_PERIOD} | Exported {export_date}"
+    c.font = Font(name=FONT, size=10, italic=True, color=DGREY)
+    c.fill = fill("FFF1F1"); c.alignment = aln(); ws2.row_dimensions[2].height = 16
+
+    ws2.row_dimensions[3].height = 26
+    for i, h in enumerate(S_COLS):
+        c = ws2[f"{col(i+1)}3"]
+        c.value = h; c.font = font(bold=True, color="FFFFFF", size=9)
+        c.fill = fill(RED); c.alignment = aln("center", wrap=True); c.border = border()
+    ws2.freeze_panes = "A4"
+
+    d_snap = pd.DataFrame()
+    if sold_out_ids:
+        d_nl = d_all[~d_all["_is_latest"] & d_all["listing_id"].isin(sold_out_ids)]
+        max_ords = d_nl.groupby("listing_id")["period_ord"].max().reset_index().rename(columns={"period_ord":"_mo"})
+        d_snap = d_nl.merge(max_ords, on="listing_id")
+        d_snap = d_snap[d_snap["period_ord"] == d_snap["_mo"]]
+        s_meta = d_snap.groupby("listing_id").first().reset_index()
+        s_agg  = d_snap.groupby("listing_id").agg(
+            units=("sub_listing_id","nunique"), avg_price=("price","mean"),
+            avg_pm2=("price_per_m2","mean"), min_price=("price","min"),
+            max_price=("price","max"), avg_size=("size","mean"), last_period=("period","max"),
+        ).reset_index()
+        s_meta = s_meta.merge(s_agg, on="listing_id", suffixes=("","_agg"))
+        srow = 4
+        for i, r_ in s_meta.iterrows():
+            bg = fill(LGREY) if i % 2 == 0 else fill("FFFFFF")
+            vals = [
+                str(r_.get("property_name","")),
+                str(r_.get("developer","")) if pd.notna(r_.get("developer")) else "",
+                str(r_.get("municipality","")),
+                str(r_.get("province","")) if pd.notna(r_.get("province")) else "",
+                str(r_.get("city_area","")) if pd.notna(r_.get("city_area")) else "",
+                str(r_.get("house_type","")) if pd.notna(r_.get("house_type")) else "",
+                str(r_.get("esg_grade","")) if pd.notna(r_.get("esg_grade")) else "",
+                str(r_.get("last_period","")),
+                _listing_sold_date(int(r_["listing_id"])),
+                int(r_.get("units",0)) if pd.notna(r_.get("units")) else 0,
+                int(round(r_.get("avg_price",0))) if pd.notna(r_.get("avg_price")) else None,
+                int(round(r_.get("avg_pm2",0)))   if pd.notna(r_.get("avg_pm2"))   else None,
+                int(round(r_.get("min_price",0))) if pd.notna(r_.get("min_price")) else None,
+                int(round(r_.get("max_price",0))) if pd.notna(r_.get("max_price")) else None,
+                round(float(r_.get("avg_size",0)),1) if pd.notna(r_.get("avg_size")) else None,
+            ]
+            ws2.row_dimensions[srow].height = 16
+            for ci, v in enumerate(vals):
+                c = ws2[f"{col(ci+1)}{srow}"]
+                c.value = v; c.fill = bg; c.border = border()
+                is_price = ci in (10,11,12,13)
+                c.alignment = aln("right" if ci >= 9 else "left")
+                if is_price and v:
+                    c.number_format = "#,##0"; c.font = font(color=RED if ci in (10,11) else DGREY, size=9)
+                elif ci == 8:
+                    c.font = font(bold=True, color=RED, size=9)
+                else:
+                    c.font = font(color=DGREY, size=9)
+            srow += 1
+    else:
+        ws2.merge_cells(f"A4:{col(NS)}4")
+        c = ws2["A4"]
+        c.value = "No sold-out properties found for the selected filters."
+        c.font = font(italic=True, color=DGREY, size=10); c.alignment = aln()
+
+    for i, w in enumerate([28,18,16,12,18,14,6,12,12,10,13,10,13,13,12]):
+        ws2.column_dimensions[col(i+1)].width = w
+
+    # ── Sheet 3: Sold-out units (one row per apartment) ───────────────────
+    ws3 = wb.create_sheet("Sold Out Units")
+
+    APT_COLS = ["Property Name","Municipality","Sold Date","Unit ID","Unit Type",
+                "Floor","Size (m²)","Bedrooms","Bathrooms","Price (€)","€/m²",
+                "Terrace","Parking","Pool","Lift","AC","Link"]
+    NC3 = len(APT_COLS)
+
+    ws3.merge_cells(f"A1:{col(NC3)}1")
+    c = ws3["A1"]
+    c.value = "Sold Out Units — Spain Housing Intelligence"
+    c.font = Font(name=FONT, bold=True, size=14, color=RED)
+    c.alignment = aln(); ws3.row_dimensions[1].height = 26
+
+    ws3.merge_cells(f"A2:{col(NC3)}2")
+    c = ws3["A2"]
+    c.value = f"Individual apartment records for all sold-out developments | Exported {export_date}"
+    c.font = Font(name=FONT, size=10, italic=True, color=DGREY)
+    c.fill = fill("FFF1F1"); c.alignment = aln(); ws3.row_dimensions[2].height = 16
+
+    ws3.row_dimensions[3].height = 26
+    for i, h in enumerate(APT_COLS):
+        c = ws3[f"{col(i+1)}3"]
+        c.value = h; c.font = font(bold=True, color="FFFFFF", size=9)
+        c.fill = fill(RED); c.alignment = aln("center", wrap=True); c.border = border()
+    ws3.freeze_panes = "A4"
+
+    if not d_snap.empty:
+        apt_cols_need = ["listing_id","sub_listing_id","property_name","municipality",
+                         "unit_type","floor","size","bedrooms","bathrooms","price","price_per_m2",
+                         "has_terrace","has_parking","has_pool","has_lift","has_ac","unit_url"]
+        apts_df = d_snap[[c_ for c_ in apt_cols_need if c_ in d_snap.columns]].drop_duplicates("sub_listing_id").copy()
+        apts_df = apts_df.sort_values(["listing_id","unit_type","price"])
+        row3 = 4
+        for i, r_ in apts_df.iterrows():
+            bg = fill(LGREY) if i % 2 == 0 else fill("FFFFFF")
+            def yn(col_): return "Yes" if pd.notna(r_.get(col_)) and bool(r_.get(col_)) else "No"
+            url = str(r_.get("unit_url","")) if "unit_url" in r_.index and pd.notna(r_.get("unit_url")) else ""
+            sub_id = int(r_["sub_listing_id"]) if "sub_listing_id" in r_.index and pd.notna(r_.get("sub_listing_id")) else None
+            apt_sold = _sub_to_sold_date.get(sub_id, _FALLBACK_SOLD_DATE) if sub_id else _FALLBACK_SOLD_DATE
+            vals3 = [
+                str(r_.get("property_name","")),
+                str(r_.get("municipality","")),
+                apt_sold,
+                str(r_.get("sub_listing_id","")) if pd.notna(r_.get("sub_listing_id")) else "",
+                str(r_.get("unit_type","")) if pd.notna(r_.get("unit_type")) else "",
+                str(r_.get("floor","")) if pd.notna(r_.get("floor")) else "",
+                round(float(r_.get("size",0)),1) if pd.notna(r_.get("size")) else None,
+                int(r_["bedrooms"]) if "bedrooms" in r_.index and pd.notna(r_.get("bedrooms")) else None,
+                int(r_["bathrooms"]) if "bathrooms" in r_.index and pd.notna(r_.get("bathrooms")) else None,
+                int(round(r_["price"])) if pd.notna(r_.get("price")) else None,
+                int(round(r_["price_per_m2"])) if "price_per_m2" in r_.index and pd.notna(r_.get("price_per_m2")) else None,
+                yn("has_terrace"), yn("has_parking"), yn("has_pool"), yn("has_lift"), yn("has_ac"),
+                url,
+            ]
+            ws3.row_dimensions[row3].height = 14
+            for ci, v in enumerate(vals3):
+                c = ws3[f"{col(ci+1)}{row3}"]
+                c.value = v; c.fill = bg; c.border = border()
+                is_num = ci in (6,7,8,9,10)
+                c.alignment = aln("right" if is_num else "left")
+                if ci in (9,10) and v:
+                    c.number_format = "#,##0"
+                    c.font = font(bold=(ci==9), color=RED if ci==9 else DGREY, size=9)
+                elif ci == 2:
+                    c.font = font(bold=True, color=RED, size=9)
+                elif ci == 16 and url:
+                    c.hyperlink = url
+                    c.font = Font(name=FONT, color="0563C1", underline="single", size=9)
+                else:
+                    c.font = font(color=DGREY, size=9)
+            row3 += 1
+    else:
+        ws3.merge_cells(f"A4:{col(NC3)}4")
+        c = ws3["A4"]
+        c.value = "No sold-out units found for the selected filters."
+        c.font = font(italic=True, color=DGREY, size=10); c.alignment = aln()
+
+    for i, w in enumerate([28,14,12,12,10,8,9,7,7,13,10,8,8,6,6,6,40]):
+        ws3.column_dimensions[col(i+1)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=market_summary.xlsx"})
 
 
 @app.get("/resolve-url")
