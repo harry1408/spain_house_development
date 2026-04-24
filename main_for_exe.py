@@ -2615,6 +2615,307 @@ def search_listings(
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  DESCRIPTION SEARCH  — keyword / fuzzy search across property descriptions
+# ══════════════════════════════════════════════════════════════════════════
+_DESC_SEARCH_CACHE: dict = {}
+_DESC_SEARCH_CACHE_MAX = 500
+
+@app.get("/description/search")
+def description_search_endpoint(
+    q:            str                    = Query(default=""),
+    municipality: Optional[List[str]]   = Query(None),
+    province:     Optional[List[str]]   = Query(None),
+    unit_type:    Optional[List[str]]   = Query(None),
+    esg:          Optional[List[str]]   = Query(None),
+    house_type:   Optional[List[str]]   = Query(None),
+    min_price:    Optional[float]       = Query(None),
+    max_price:    Optional[float]       = Query(None),
+    min_m2:       Optional[float]       = Query(None),
+    max_m2:       Optional[float]       = Query(None),
+):
+    from difflib import SequenceMatcher as _SM
+
+    def _esg_grade(val):
+        if not val or str(val).lower() in ("nan","unknown",""):
+            return None
+        m = re.findall(r':\s*([A-G])', str(val), re.IGNORECASE)
+        if m: return sorted(m, key=lambda g: "ABCDEFG".index(g.upper()))[0].upper()
+        m2 = re.match(r'^([A-G])$', str(val).strip(), re.IGNORECASE)
+        return m2.group(1).upper() if m2 else None
+
+    q = q.strip()
+    if not q:
+        return safe_json({"listings": [], "total": 0})
+
+    _cache_key = (
+        q.lower(),
+        tuple(sorted(municipality or [])),
+        tuple(sorted(province     or [])),
+        tuple(sorted(unit_type    or [])),
+        tuple(sorted(esg          or [])),
+        tuple(sorted(house_type   or [])),
+        min_price, max_price, min_m2, max_m2,
+    )
+    if _cache_key in _DESC_SEARCH_CACHE:
+        return _DESC_SEARCH_CACHE[_cache_key]
+
+    q_tokens = [w.lower() for w in re.split(r'[\s\W]+', q) if len(w) >= 2]
+    if not q_tokens:
+        return safe_json({"listings": [], "total": 0})
+
+    d = df[df["_is_latest"]].copy()
+    if municipality: d = d[d["municipality"].isin(municipality)]
+    if province and "province" in d.columns:
+        d = d[d["province"].isin(province)]
+    if unit_type:    d = d[d["unit_type"].isin(unit_type)]
+    if house_type and "house_type" in d.columns:
+        d = d[d["house_type"].isin(house_type)]
+    if min_price:    d = d[d["price"] >= min_price]
+    if max_price:    d = d[d["price"] <= max_price]
+    if min_m2 and "price_per_m2" in d.columns:
+        d = d[d["price_per_m2"] >= min_m2]
+    if max_m2 and "price_per_m2" in d.columns:
+        d = d[d["price_per_m2"] <= max_m2]
+    if esg and "esg_certificate" in d.columns:
+        d = d[d["esg_certificate"].apply(lambda v: _esg_grade(v) in esg)]
+
+    if d.empty:
+        return safe_json({"listings": [], "total": 0})
+
+    desc_col = next((c for c in _DESC_COLS if c in df.columns), None)
+
+    _MARK = lambda s: f'<mark style="background:#FEF3C7;color:#92400E;border-radius:2px;padding:0 2px">{s}</mark>'
+
+    def _highlight(text, tokens):
+        for tok in sorted(tokens, key=len, reverse=True):
+            text = re.sub(re.escape(tok), lambda m: _MARK(m.group()), text, flags=re.IGNORECASE)
+        return text
+
+    def _score_and_build(text):
+        if not text: return 0, set(), "", ""
+        tl = text.lower()
+        dwords = re.split(r'\W+', tl)
+        score, matched = 0, set()
+        for tok in q_tokens:
+            if tok in tl:
+                score += 3; matched.add(tok)
+            elif any(dw.startswith(tok) for dw in dwords if len(dw) >= len(tok)):
+                score += 2; matched.add(tok)
+            else:
+                best = max((_SM(None, tok, dw).ratio() for dw in dwords if abs(len(dw)-len(tok)) <= 3), default=0)
+                if best >= 0.82:
+                    score += 1; matched.add(tok)
+        if not score: return 0, set(), "", ""
+        pos   = min((tl.find(t) for t in matched if tl.find(t) >= 0), default=0)
+        start = max(0, pos - 60)
+        end   = min(len(text), start + 280)
+        snip  = ("…" if start else "") + text[start:end] + ("…" if end < len(text) else "")
+        return score, matched, _highlight(snip, matched), _highlight(text, matched)
+
+    results = []
+    for lid_val, sub in d.groupby("listing_id"):
+        lid  = int(lid_val)
+        meta = sub.iloc[0]
+
+        desc = ""
+        if desc_col:
+            full_row = df[(df["listing_id"] == lid) & df["_is_latest"]]
+            if not full_row.empty and desc_col in full_row.columns:
+                v = full_row.iloc[0][desc_col]
+                if pd.notna(v):
+                    desc = str(v).strip()
+                    for sl in ["This comment was automatically translated and may not be 100% accurate.",
+                               "See description in the original language"]:
+                        desc = desc.replace(sl, "").strip()
+
+        score, matched, snippet, full_hl = _score_and_build(desc)
+        if score == 0: continue
+
+        lat_v, lng_v, _ = _listing_coords(lid, str(meta.get("municipality", "")))
+        ht_counts = dict(sub[sub["house_type"].notna()].groupby("house_type")["sub_listing_id"].nunique().astype(int)) \
+                    if "house_type" in sub.columns else {}
+
+        _ut_stats_lid = {}
+        if "unit_type" in sub.columns and "price" in sub.columns:
+            _sub_ut = sub[sub["unit_type"].notna()].copy()
+            if not _sub_ut.empty:
+                _ag = {"avg_price": ("price","mean"), "min_price": ("price","min"), "max_price": ("price","max")}
+                if "price_per_m2" in sub.columns: _ag["avg_pm2"] = ("price_per_m2","mean")
+                if "size" in sub.columns:         _ag["avg_size"] = ("size","mean")
+                for _, _ur in _sub_ut.groupby("unit_type").agg(**_ag).reset_index().iterrows():
+                    _ut_stats_lid[_ur["unit_type"]] = {
+                        "avg_price": round(float(_ur["avg_price"])) if pd.notna(_ur.get("avg_price")) else None,
+                        "min_price": round(float(_ur["min_price"])) if pd.notna(_ur.get("min_price")) else None,
+                        "max_price": round(float(_ur["max_price"])) if pd.notna(_ur.get("max_price")) else None,
+                        "avg_pm2":   round(float(_ur["avg_pm2"]))   if "avg_pm2"  in _ur.index and pd.notna(_ur.get("avg_pm2"))  else None,
+                        "avg_size":  round(float(_ur["avg_size"]),1) if "avg_size" in _ur.index and pd.notna(_ur.get("avg_size")) else None,
+                    }
+
+        results.append({
+            "listing_id":              lid,
+            "property_name":           _clean(meta.get("property_name", "")),
+            "municipality":            _clean(meta.get("municipality", "")),
+            "province":                _clean(meta.get("province", "")),
+            "developer":               _clean(meta.get("developer", "")),
+            "city_area":               _clean(meta.get("city_area", "")),
+            "lat": lat_v, "lng": lng_v,
+            "lat_exact":               lid in LISTING_COORDS,
+            "esg_grade":               _esg_grade(meta.get("esg_certificate", "")),
+            "unit_types":              ", ".join(sorted(sub["unit_type"].dropna().unique())),
+            "house_types":             ", ".join(sorted(t for t in (sub["house_type"].dropna().unique() if "house_type" in sub.columns else []) if t)),
+            "avg_price":               round(float(sub["price"].mean())) if not sub["price"].isna().all() else None,
+            "avg_price_m2":            round(float(sub["price_per_m2"].mean()), 1) if "price_per_m2" in sub.columns and not sub["price_per_m2"].isna().all() else None,
+            "min_price":               round(float(sub["price"].min())) if not sub["price"].isna().all() else None,
+            "max_price":               round(float(sub["price"].max())) if not sub["price"].isna().all() else None,
+            "units":                   int(sub["sub_listing_id"].nunique()),
+            "unit_type_counts":        dict(sub.groupby("unit_type")["sub_listing_id"].nunique().astype(int)) if "unit_type" in sub.columns else {},
+            "house_type_counts":       ht_counts,
+            "prev_unit_type_counts":   {},
+            "prev_house_type_counts":  {},
+            "unit_type_stats":         _ut_stats_lid,
+            "house_type_unit_counts":  {},
+            "prev_house_type_unit_counts": {},
+            "is_partial_delisted":     lid in PARTIAL_DELISTED_IDS,
+            "stated_total_units":      _extract_stated_units(desc) if desc else None,
+            "nearest_beach_km":        None,
+            "nearest_beach_name":      None,
+            "match_score":             score,
+            "description_snippet":     snippet,
+            "full_description_html":   full_hl,
+        })
+
+    results.sort(key=lambda x: (-x["match_score"], x.get("property_name", "")))
+
+    # ── Search fully-delisted listings descriptions ─────────────────────────
+    _delisted_results = []
+    if desc_col:
+        _latest_ids   = set(df[df["_is_latest"]]["listing_id"].unique())
+        _nonlatest_ids = set(df[~df["_is_latest"]]["listing_id"].unique())
+        _fully_del_ids = _nonlatest_ids - _latest_ids
+        if municipality:
+            _fully_del_ids &= set(df[df["municipality"].isin(municipality)]["listing_id"])
+        if province and "province" in df.columns:
+            _fully_del_ids &= set(df[df["province"].isin(province)]["listing_id"])
+        if _fully_del_ids:
+            _df_del = df[df["listing_id"].isin(_fully_del_ids)]
+            for _dlid_val, _dsub in _df_del.groupby("listing_id"):
+                _dlid = int(_dlid_val)
+                _ddesc = ""
+                if desc_col in _dsub.columns:
+                    _dv_rows = _dsub.dropna(subset=[desc_col])
+                    if not _dv_rows.empty:
+                        _dv = _dv_rows.iloc[0][desc_col]
+                        if pd.notna(_dv):
+                            _ddesc = str(_dv).strip()
+                            for _sl in ["This comment was automatically translated and may not be 100% accurate.",
+                                        "See description in the original language"]:
+                                _ddesc = _ddesc.replace(_sl, "").strip()
+                _dscore, _, _, _ = _score_and_build(_ddesc)
+                if _dscore == 0: continue
+                _dp = _dsub[~_dsub["_is_latest"]].copy() if "_is_latest" in _dsub.columns else _dsub.copy()
+                if _dp.empty: _dp = _dsub.copy()
+                if "period_ord" in _dp.columns:
+                    _dp = _dp[_dp["period_ord"] == _dp["period_ord"].max()]
+                if min_price and "price" in _dp.columns and not _dp["price"].isna().all():
+                    if float(_dp["price"].max()) < min_price: continue
+                if max_price and "price" in _dp.columns and not _dp["price"].isna().all():
+                    if float(_dp["price"].min()) > max_price: continue
+                if min_m2 and "price_per_m2" in _dp.columns and not _dp["price_per_m2"].isna().all():
+                    if float(_dp["price_per_m2"].max()) < min_m2: continue
+                if max_m2 and "price_per_m2" in _dp.columns and not _dp["price_per_m2"].isna().all():
+                    if float(_dp["price_per_m2"].min()) > max_m2: continue
+                if esg and "esg_certificate" in _dp.columns:
+                    if _esg_grade(_dp.iloc[0].get("esg_certificate", "")) not in esg: continue
+                if unit_type and "unit_type" in _dp.columns:
+                    if not _dp["unit_type"].isin(unit_type).any(): continue
+                if house_type and "house_type" in _dp.columns:
+                    if not _dp["house_type"].isin(house_type).any(): continue
+                _dmeta = _dp.iloc[0]
+                _dlat, _dlng, _ = _listing_coords(_dlid, str(_dmeta.get("municipality", "")))
+                _du_types = ", ".join(sorted(_dp["unit_type"].dropna().unique())) if "unit_type" in _dp.columns else ""
+                _dh_types = ", ".join(sorted(t for t in (_dp["house_type"].dropna().unique() if "house_type" in _dp.columns else []) if t))
+                _davg_p = round(float(_dp["price"].mean())) if "price" in _dp.columns and not _dp["price"].isna().all() else None
+                _dmin_p = round(float(_dp["price"].min()))  if "price" in _dp.columns and not _dp["price"].isna().all() else None
+                _dmax_p = round(float(_dp["price"].max()))  if "price" in _dp.columns and not _dp["price"].isna().all() else None
+                _dapm2  = round(float(_dp["price_per_m2"].mean()), 1) if "price_per_m2" in _dp.columns and not _dp["price_per_m2"].isna().all() else None
+                _sold_dt = None
+                if "period" in _dsub.columns:
+                    _sp = _dsub["period"].dropna()
+                    if not _sp.empty: _sold_dt = str(_sp.max())
+                _delisted_results.append({
+                    "listing_id":        _dlid,
+                    "property_name":     _clean(_dmeta.get("property_name", "")),
+                    "municipality":      _clean(_dmeta.get("municipality", "")),
+                    "province":          _clean(_dmeta.get("province", "")),
+                    "developer":         _clean(_dmeta.get("developer", "")),
+                    "city_area":         _clean(_dmeta.get("city_area", "")),
+                    "lat": _dlat, "lng": _dlng,
+                    "esg_grade":         _esg_grade(_dmeta.get("esg_certificate", "")),
+                    "unit_types":        _du_types,
+                    "house_types":       _dh_types,
+                    "avg_price":         _davg_p,
+                    "min_price":         _dmin_p,
+                    "max_price":         _dmax_p,
+                    "avg_price_m2":      _dapm2,
+                    "units":             int(_dp["sub_listing_id"].nunique()) if "sub_listing_id" in _dp.columns else 0,
+                    "unit_type_counts":  dict(_dp.groupby("unit_type")["sub_listing_id"].nunique().astype(int)) if "unit_type" in _dp.columns and "sub_listing_id" in _dp.columns else {},
+                    "house_type_counts": dict(_dp[_dp["house_type"].notna()].groupby("house_type")["sub_listing_id"].nunique().astype(int)) if "house_type" in _dp.columns and "sub_listing_id" in _dp.columns else {},
+                    "sold_date":         _sold_dt,
+                    "delisted_type":     "full",
+                    "match_score":       _dscore,
+                })
+        _delisted_results.sort(key=lambda x: (-x["match_score"], x.get("property_name", "")))
+
+    _matched_ids = {r["listing_id"] for r in results}
+    _dm = d[d["listing_id"].isin(_matched_ids)]
+    _UT_ORD = ["Studio","1BR","2BR","3BR","4BR","5BR","Penthouse"]
+    _srv_ut, _srv_ht = [], []
+    if not _dm.empty:
+        if "unit_type" in _dm.columns:
+            _uta = _dm[_dm["unit_type"].notna()].copy()
+            if not _uta.empty:
+                _uag = {"count": ("sub_listing_id","nunique"), "avg_price": ("price","mean"),
+                        "min_price": ("price","min"), "max_price": ("price","max")}
+                if "price_per_m2" in _uta.columns: _uag["avg_pm2"] = ("price_per_m2","mean")
+                if "size" in _uta.columns:         _uag["avg_size"] = ("size","mean")
+                _uta_df = _uta.groupby("unit_type").agg(**_uag).reset_index()
+                _uta_df["_o"] = _uta_df["unit_type"].map(lambda x: _UT_ORD.index(x) if x in _UT_ORD else 99)
+                for _, _r in _uta_df.sort_values("_o").iterrows():
+                    _srv_ut.append({
+                        "unit_type": _r["unit_type"], "count": int(_r["count"]),
+                        "avg_price": round(float(_r["avg_price"])) if pd.notna(_r.get("avg_price")) else None,
+                        "min_price": round(float(_r["min_price"])) if pd.notna(_r.get("min_price")) else None,
+                        "max_price": round(float(_r["max_price"])) if pd.notna(_r.get("max_price")) else None,
+                        "avg_pm2":   round(float(_r["avg_pm2"]))   if "avg_pm2"  in _r.index and pd.notna(_r.get("avg_pm2"))  else None,
+                        "avg_size":  round(float(_r["avg_size"]),1) if "avg_size" in _r.index and pd.notna(_r.get("avg_size")) else None,
+                    })
+        if "house_type" in _dm.columns:
+            _hta = _dm[_dm["house_type"].notna() & (_dm["house_type"] != "")].copy()
+            if not _hta.empty:
+                _hag = {"count": ("sub_listing_id","nunique"), "avg_price": ("price","mean"),
+                        "min_price": ("price","min"), "max_price": ("price","max")}
+                if "price_per_m2" in _hta.columns: _hag["avg_pm2"] = ("price_per_m2","mean")
+                if "size" in _hta.columns:         _hag["avg_size"] = ("size","mean")
+                for _, _r in _hta.groupby("house_type").agg(**_hag).reset_index().sort_values("count", ascending=False).iterrows():
+                    _srv_ht.append({
+                        "house_type": _r["house_type"], "count": int(_r["count"]),
+                        "avg_price":  round(float(_r["avg_price"])) if pd.notna(_r.get("avg_price")) else None,
+                        "min_price":  round(float(_r["min_price"])) if pd.notna(_r.get("min_price")) else None,
+                        "max_price":  round(float(_r["max_price"])) if pd.notna(_r.get("max_price")) else None,
+                        "avg_pm2":    round(float(_r["avg_pm2"]))   if "avg_pm2"  in _r.index and pd.notna(_r.get("avg_pm2"))  else None,
+                        "avg_size":   round(float(_r["avg_size"]),1) if "avg_size" in _r.index and pd.notna(_r.get("avg_size")) else None,
+                    })
+
+    _resp = safe_json({"listings": results, "total": len(results),
+                       "unit_type_stats": _srv_ut, "house_type_stats": _srv_ht,
+                       "delisted": _delisted_results})
+    if len(_DESC_SEARCH_CACHE) >= _DESC_SEARCH_CACHE_MAX:
+        _DESC_SEARCH_CACHE.clear()
+    _DESC_SEARCH_CACHE[_cache_key] = _resp
+    return _resp
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  EXCEL EXPORT  — selected listings in wide per-unit-type format
 # ══════════════════════════════════════════════════════════════════════════
 @app.get("/search/export")
