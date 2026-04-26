@@ -1562,9 +1562,10 @@ def _build_description_index():
 
         muni_str = str(meta.get("municipality", ""))
         prov_str = str(meta.get("province", "")) if "province" in meta.index else ""
+        _name_words = frozenset(w.lower() for w in re.split(r'\W+', str(meta.get("property_name", ""))) if len(w) >= 2)
         return {
             "words":         words,
-            "word_set":      frozenset(words),
+            "word_set":      frozenset(words) - _name_words,
             "desc":          desc,
             "record":        record,
             "municipality":  muni_str,
@@ -2786,6 +2787,8 @@ def description_search_endpoint(
     max_price:    Optional[float]       = Query(None),
     min_m2:       Optional[float]       = Query(None),
     max_m2:       Optional[float]       = Query(None),
+    offset:       int                   = Query(0),
+    limit:        int                   = Query(50),
 ):
     from difflib import SequenceMatcher as _SM
 
@@ -2793,8 +2796,11 @@ def description_search_endpoint(
     if not q:
         return safe_json({"listings": [], "total": 0, "unit_type_stats": [], "house_type_stats": [], "delisted": []})
 
+    # Normalise comma-separated terms so "pool,terrace" and "terrace,pool" share a cache entry
+    _q_terms = [t.strip() for t in q.lower().split(",") if t.strip()]
+    _q_normalised = ",".join(sorted(_q_terms))
     _cache_key = (
-        q.lower(),
+        _q_normalised,
         tuple(sorted(municipality or [])),
         tuple(sorted(province     or [])),
         tuple(sorted(unit_type    or [])),
@@ -2803,9 +2809,24 @@ def description_search_endpoint(
         min_price, max_price, min_m2, max_m2,
     )
     if _cache_key in _DESC_SEARCH_CACHE:
-        return _DESC_SEARCH_CACHE[_cache_key]
+        _c = _DESC_SEARCH_CACHE[_cache_key]
+        return safe_json({
+            "listings":        _c["listings"][offset : offset + limit],
+            "total":           _c["total"],
+            "has_more":        offset + limit < _c["total"],
+            "pins":            _c.get("pins", [])        if offset == 0 else [],
+            "unit_type_stats": _c["unit_type_stats"]     if offset == 0 else [],
+            "house_type_stats":_c["house_type_stats"]    if offset == 0 else [],
+            "delisted":        _c["delisted"]             if offset == 0 else [],
+        })
 
-    q_tokens = [w.lower() for w in re.split(r'[\s\W]+', q) if len(w) >= 2]
+    # Build tokens: split each comma-separated term on whitespace/punctuation then deduplicate
+    _seen = set()
+    q_tokens = []
+    for _term in _q_terms:
+        for _w in re.split(r'[\s\W]+', _term):
+            if len(_w) >= 2 and _w not in _seen:
+                q_tokens.append(_w); _seen.add(_w)
     if not q_tokens:
         return safe_json({"listings": [], "total": 0, "unit_type_stats": [], "house_type_stats": [], "delisted": []})
 
@@ -2866,18 +2887,15 @@ def description_search_endpoint(
                 candidate_lids.update(dsi_word_idx.get(dsi_words[i], frozenset()))
                 i += 1
 
-        # Score candidates; fuzzy tokens that didn't match via prefix need full word scan
+        # Score candidates
         hits = []
         for lid in candidate_lids:
             e = dsi.get(lid)
             if e is None or not _filter_entry(e): continue
             score, matched = _score_entry(e)
             if score == 0: continue
-            snip, full_hl = _make_snippet_hl(e, matched)
             rec = dict(e["record"])
-            rec["match_score"]          = score
-            rec["description_snippet"]  = snip
-            rec["full_description_html"] = full_hl
+            rec["match_score"] = score
             hits.append(rec)
         return hits
 
@@ -2931,13 +2949,32 @@ def description_search_endpoint(
                             "avg_size":   round(float(_r["avg_size"]), 1) if "avg_size" in _r.index and pd.notna(_r.get("avg_size")) else None,
                         })
 
-    _resp = safe_json({"listings": results, "total": len(results),
-                       "unit_type_stats": _srv_ut, "house_type_stats": _srv_ht,
-                       "delisted": _delisted_results})
+    _all_pins = [
+        {"listing_id": r["listing_id"], "property_name": r.get("property_name",""),
+         "lat": r.get("lat"), "lng": r.get("lng"),
+         "avg_price": r.get("avg_price"), "units": r.get("units")}
+        for r in results if r.get("lat") and r.get("lng")
+    ]
+    _cached_data = {
+        "listings":        results,
+        "total":           len(results),
+        "pins":            _all_pins,
+        "unit_type_stats": _srv_ut,
+        "house_type_stats":_srv_ht,
+        "delisted":        _delisted_results,
+    }
     if len(_DESC_SEARCH_CACHE) >= _DESC_SEARCH_CACHE_MAX:
         _DESC_SEARCH_CACHE.clear()
-    _DESC_SEARCH_CACHE[_cache_key] = _resp
-    return _resp
+    _DESC_SEARCH_CACHE[_cache_key] = _cached_data
+    return safe_json({
+        "listings":        results[offset : offset + limit],
+        "total":           len(results),
+        "has_more":        offset + limit < len(results),
+        "pins":            _all_pins            if offset == 0 else [],
+        "unit_type_stats": _srv_ut              if offset == 0 else [],
+        "house_type_stats":_srv_ht              if offset == 0 else [],
+        "delisted":        _delisted_results    if offset == 0 else [],
+    })
 
 
 # ══════════════════════════════════════════════════════════════════════════
