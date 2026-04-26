@@ -59,7 +59,7 @@ if not _xlsx_files:
     )
 
 print(f"[data] Data dir : {_DATA_DIR}")
-print(f"[data] Loading  : {[os.path.basename(f) for f in _xlsx_files]}")
+print("[data] Loading")
 _raw = pd.concat([pd.read_excel(f) for f in _xlsx_files], ignore_index=True)
 print(f"[data] Rows: {len(_raw):,}  |  provinces: {sorted(_raw['province'].dropna().unique().tolist())}")
 
@@ -2830,17 +2830,8 @@ def description_search_endpoint(
     if not q_tokens:
         return safe_json({"listings": [], "total": 0, "unit_type_stats": [], "house_type_stats": [], "delisted": []})
 
-    _MARK = lambda s: f'<mark style="background:#FEF3C7;color:#92400E;border-radius:2px;padding:0 2px">{s}</mark>'
-
-    def _highlight(text, tokens):
-        for tok in sorted(tokens, key=len, reverse=True):
-            text = re.sub(re.escape(tok), lambda m: _MARK(m.group()), text, flags=re.IGNORECASE)
-        return text
-
     def _score_entry(entry):
-        """Score a pre-built index entry against q_tokens. Returns (score, matched_set)."""
         wset = entry["word_set"]
-        desc = entry["desc"]
         score, matched = 0, set()
         for tok in q_tokens:
             if tok in wset:
