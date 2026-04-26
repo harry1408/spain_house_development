@@ -1563,19 +1563,23 @@ def _build_description_index():
         muni_str = str(meta.get("municipality", ""))
         prov_str = str(meta.get("province", "")) if "province" in meta.index else ""
         _name_words = frozenset(w.lower() for w in re.split(r'\W+', str(meta.get("property_name", ""))) if len(w) >= 2)
+        _nb_km, _nb_name = _nearest_beach(lid, lat_v, lng_v)
+        record["nearest_beach_km"]  = _nb_km
+        record["nearest_beach_name"] = _nb_name
         return {
-            "words":         words,
-            "word_set":      frozenset(words) - _name_words,
-            "desc":          desc,
-            "record":        record,
-            "municipality":  muni_str,
-            "province":      prov_str,
-            "unit_type_set": frozenset(sub["unit_type"].dropna().unique()) if "unit_type" in sub.columns else frozenset(),
-            "house_type_set":frozenset(t for t in (sub["house_type"].dropna().unique()
-                                                    if "house_type" in sub.columns else []) if t),
-            "esg_grade":     esg,
-            "min_price":     min_p, "max_price": max_p,
-            "min_pm2":       min_pm2, "max_pm2": max_pm2,
+            "words":            words,
+            "word_set":         frozenset(words) - _name_words,
+            "desc":             desc,
+            "record":           record,
+            "municipality":     muni_str,
+            "province":         prov_str,
+            "unit_type_set":    frozenset(sub["unit_type"].dropna().unique()) if "unit_type" in sub.columns else frozenset(),
+            "house_type_set":   frozenset(t for t in (sub["house_type"].dropna().unique()
+                                                       if "house_type" in sub.columns else []) if t),
+            "esg_grade":        esg,
+            "min_price":        min_p, "max_price": max_p,
+            "min_pm2":          min_pm2, "max_pm2": max_pm2,
+            "nearest_beach_km": _nb_km,
         }
 
     # ── Active listings ──────────────────────────────────────────────────
@@ -1619,6 +1623,27 @@ def _build_description_index():
                 _word_del_tmp[w].add(lid)
         _DSI_DEL_word_idx.update({w: frozenset(lids) for w, lids in _word_del_tmp.items()})
         _DSI_DEL_words.extend(sorted(_word_del_tmp.keys()))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  BEACH DISTANCES  — pre-computed by precompute_beaches.py, loaded at startup
+# ══════════════════════════════════════════════════════════════════════════
+_BEACH_DIST_FILE = os.path.join(os.path.dirname(__file__), "beach_distances.json")
+_BEACH_DISTANCES: dict = {}
+if os.path.exists(_BEACH_DIST_FILE):
+    try:
+        with open(_BEACH_DIST_FILE) as _f:
+            _BEACH_DISTANCES = {int(k): v for k, v in json.load(_f).items()}
+        print(f"Loaded beach distances for {len(_BEACH_DISTANCES)} listings")
+    except Exception as _e:
+        print(f"Could not load beach_distances.json: {_e}")
+
+def _nearest_beach(listing_id, *args, **kwargs):
+    """Return (distance_km, beach_name) from pre-computed beach_distances.json."""
+    rec = _BEACH_DISTANCES.get(int(listing_id) if listing_id else -1)
+    if rec:
+        return rec.get("nearest_beach_km"), rec.get("nearest_beach_name")
+    return None, None
 
 
 _build_description_index()
@@ -1675,26 +1700,6 @@ def _haversine_km(lat1, lng1, lat2, lng2):
     dlng = _math.radians(lng2 - lng1)
     a = _math.sin(dlat/2)**2 + _math.cos(_math.radians(lat1)) * _math.cos(_math.radians(lat2)) * _math.sin(dlng/2)**2
     return R * 2 * _math.atan2(_math.sqrt(a), _math.sqrt(1-a))
-
-# ══════════════════════════════════════════════════════════════════════════
-#  BEACH DISTANCES  — pre-computed by precompute_beaches.py, loaded at startup
-# ══════════════════════════════════════════════════════════════════════════
-_BEACH_DIST_FILE = os.path.join(os.path.dirname(__file__), "beach_distances.json")
-_BEACH_DISTANCES: dict = {}
-if os.path.exists(_BEACH_DIST_FILE):
-    try:
-        with open(_BEACH_DIST_FILE) as _f:
-            _BEACH_DISTANCES = {int(k): v for k, v in json.load(_f).items()}
-        print(f"Loaded beach distances for {len(_BEACH_DISTANCES)} listings")
-    except Exception as _e:
-        print(f"Could not load beach_distances.json: {_e}")
-
-def _nearest_beach(listing_id, *args, **kwargs):
-    """Return (distance_km, beach_name) from pre-computed beach_distances.json."""
-    rec = _BEACH_DISTANCES.get(int(listing_id) if listing_id else -1)
-    if rec:
-        return rec.get("nearest_beach_km"), rec.get("nearest_beach_name")
-    return None, None
 
 # ══════════════════════════════════════════════════════════════════════════
 #  NEARBY COMPARISON  — same comarca, different listings
@@ -2319,6 +2324,7 @@ def search_listings(
     max_price:    Optional[float]     = Query(None),
     min_m2:       Optional[float]     = Query(None),
     max_m2:       Optional[float]     = Query(None),
+    max_beach_km: Optional[float]     = Query(None),
     esg:          Optional[List[str]] = Query(None),
     house_type:   Optional[List[str]] = Query(None),
 ):
@@ -2405,6 +2411,10 @@ def search_listings(
     if max_price: d = d[d["price"] <= max_price]
     if min_m2:    d = d[d["price_per_m2"] >= min_m2]
     if max_m2:    d = d[d["price_per_m2"] <= max_m2]
+    if max_beach_km:
+        _bkm_lids = {lid for lid, bd in _BEACH_DISTANCES.items()
+                     if bd.get("nearest_beach_km") is not None and bd["nearest_beach_km"] <= max_beach_km}
+        d = d[d["listing_id"].isin(_bkm_lids)]
 
     if d.empty:
         _early_center = None
@@ -2787,6 +2797,7 @@ def description_search_endpoint(
     max_price:    Optional[float]       = Query(None),
     min_m2:       Optional[float]       = Query(None),
     max_m2:       Optional[float]       = Query(None),
+    max_beach_km: Optional[float]       = Query(None),
     offset:       int                   = Query(0),
     limit:        int                   = Query(50),
 ):
@@ -2806,7 +2817,7 @@ def description_search_endpoint(
         tuple(sorted(unit_type    or [])),
         tuple(sorted(esg          or [])),
         tuple(sorted(house_type   or [])),
-        min_price, max_price, min_m2, max_m2,
+        min_price, max_price, min_m2, max_m2, max_beach_km,
     )
     if _cache_key in _DESC_SEARCH_CACHE:
         _c = _DESC_SEARCH_CACHE[_cache_key]
@@ -2820,37 +2831,67 @@ def description_search_endpoint(
             "delisted":        _c["delisted"]             if offset == 0 else [],
         })
 
-    # Qualifier words that should never match alone.
-    # Phrases containing them match as whole phrase OR main noun alone.
-    _QUALIFIERS = frozenset(["view", "front", "back", "side"])
-    # Qualifiers that can also appear joined as compound words (beachfront ↔ beach front)
-    _COMPOUND_QUALS = frozenset(["front"])
-
-    _q_exception_phrases = []  # (spaced_phrase, joined_form, [main_words])
-    _regular_tokens = []
-    _seen = set()
+    _single_tokens = []
+    _phrase_variants = []   # (spaced, joined, hyphenated)
+    _seen_tokens = set()
+    _seen_phrases = set()
     q_tokens = []
+
+    # Known real-estate compound suffixes — split without requiring them in the index
+    _KNOWN_SFXS = ["facing", "front", "view", "side", "line", "top"]
 
     for _term in _q_terms:
         _words = [w for w in re.split(r'[\s\W]+', _term) if len(w) >= 2]
-        # Detect compound: "beachfront" → treat as "beach front"
+        if not _words:
+            continue
+        # For single tokens try to detect compound words (e.g. "beachfront", "seaview")
+        # and generate phrase variants (spaced / joined / hyphenated).
+        # Strategy: known suffixes first (no index needed), then index-based fallback.
+        _compound = None
         if len(_words) == 1:
-            for _cq in _COMPOUND_QUALS:
-                if _words[0].endswith(_cq) and len(_words[0]) > len(_cq) + 1:
-                    _prefix = _words[0][:-len(_cq)]
-                    _words = [_prefix, _cq]; _term = f"{_prefix} {_cq}"
+            _w = _words[0]
+            # 1. Known suffix check (prefix must be >= 3 chars)
+            for _sfx in _KNOWN_SFXS:
+                if _w.endswith(_sfx) and len(_w) > len(_sfx) + 2:
+                    _compound = (_w[:-len(_sfx)], _sfx)
                     break
-        if len(_words) > 1 and any(w in _QUALIFIERS for w in _words):
-            _main   = [w for w in _words if w not in _QUALIFIERS]
-            _joined = _term.replace(" ", "")
-            _q_exception_phrases.append((_term, _joined, _main))
+            # 2. Index-based fallback: both halves must be indexed words
+            if not _compound and len(_w) >= 6:
+                for _i in range(3, len(_w) - 2):
+                    _a, _b = _w[:_i], _w[_i:]
+                    if _a in _DSI_word_idx and _b in _DSI_word_idx:
+                        _compound = (_a, _b)
+                        break
+
+        # Always register the original token for word-set matching
+        if len(_words) == 1:
+            _w = _words[0]
+            if _w not in _seen_tokens:
+                _single_tokens.append(_w)
+                q_tokens.append(_w)
+                _seen_tokens.add(_w)
+            # If it's a compound, also register phrase variants + split parts in q_tokens
+            if _compound:
+                _ca, _cb = _compound
+                _spaced     = f"{_ca} {_cb}"
+                _joined     = _w           # same as _ca + _cb
+                _hyphenated = f"{_ca}-{_cb}"
+                if _spaced not in _seen_phrases:
+                    _phrase_variants.append((_spaced, _joined, _hyphenated))
+                    _seen_phrases.add(_spaced)
+                for _tok in [_ca, _cb]:
+                    if _tok not in _seen_tokens:
+                        q_tokens.append(_tok); _seen_tokens.add(_tok)
         else:
+            _spaced     = " ".join(_words)
+            _joined     = "".join(_words)
+            _hyphenated = "-".join(_words)
+            if _spaced not in _seen_phrases:
+                _phrase_variants.append((_spaced, _joined, _hyphenated))
+                _seen_phrases.add(_spaced)
             for _w in _words:
-                if _w not in _seen:
-                    _regular_tokens.append(_w)
-        for _w in _words:
-            if _w not in _seen:
-                q_tokens.append(_w); _seen.add(_w)
+                if _w not in _seen_tokens:
+                    q_tokens.append(_w); _seen_tokens.add(_w)
 
     if not q_tokens:
         return safe_json({"listings": [], "total": 0, "unit_type_stats": [], "house_type_stats": [], "delisted": []})
@@ -2859,7 +2900,7 @@ def description_search_endpoint(
         wset     = entry["word_set"]
         desc_low = entry["desc"].lower()
         score, matched = 0, set()
-        for tok in _regular_tokens:
+        for tok in _single_tokens:
             if tok in wset:
                 score += 3; matched.add(tok)
             elif any(w.startswith(tok) for w in wset if len(w) >= len(tok)):
@@ -2868,12 +2909,9 @@ def description_search_endpoint(
                 best = max((_SM(None, tok, w).ratio() for w in wset if abs(len(w) - len(tok)) <= 3), default=0)
                 if best >= 0.82:
                     score += 1; matched.add(tok)
-        # Exception phrases: match spaced form OR joined compound OR main noun alone
-        for phrase, joined, main_words in _q_exception_phrases:
-            if phrase in desc_low or joined in desc_low:
-                score += 3; matched.add(phrase)
-            elif main_words and any(w in wset for w in main_words):
-                score += 2; matched.add(phrase)
+        for spaced, joined, hyphenated in _phrase_variants:
+            if spaced in desc_low or joined in desc_low or hyphenated in desc_low:
+                score += 3; matched.add(spaced)
         return score, matched
 
     def _make_snippet_hl(entry, matched):
@@ -2892,10 +2930,11 @@ def description_search_endpoint(
         if unit_type    and not e["unit_type_set"].intersection(unit_type):    return False
         if house_type   and not e["house_type_set"].intersection(house_type):  return False
         if esg          and e["esg_grade"] not in esg:             return False
-        if min_price and e["max_price"] is not None and e["max_price"] < min_price: return False
-        if max_price and e["min_price"] is not None and e["min_price"] > max_price: return False
-        if min_m2    and e["max_pm2"]   is not None and e["max_pm2"]   < min_m2:   return False
-        if max_m2    and e["min_pm2"]   is not None and e["min_pm2"]   > max_m2:   return False
+        if min_price    and e["max_price"]        is not None and e["max_price"]        < min_price:    return False
+        if max_price    and e["min_price"]        is not None and e["min_price"]        > max_price:    return False
+        if min_m2       and e["max_pm2"]          is not None and e["max_pm2"]          < min_m2:       return False
+        if max_m2       and e["min_pm2"]          is not None and e["min_pm2"]          > max_m2:       return False
+        if max_beach_km and e["nearest_beach_km"] is not None and e["nearest_beach_km"] > max_beach_km: return False
         return True
 
     def _search_index(dsi, dsi_words, dsi_word_idx):
