@@ -2812,19 +2812,42 @@ def description_search_endpoint(
             "delisted":        _c["delisted"]             if offset == 0 else [],
         })
 
+    _QUALIFIERS = frozenset(["view", "front", "back", "side"])
+    _COMPOUND_QUALS = frozenset(["front"])
+
+    _q_exception_phrases = []
+    _regular_tokens = []
     _seen = set()
     q_tokens = []
+
     for _term in _q_terms:
-        for _w in re.split(r'[\s\W]+', _term):
-            if len(_w) >= 2 and _w not in _seen:
+        _words = [w for w in re.split(r'[\s\W]+', _term) if len(w) >= 2]
+        if len(_words) == 1:
+            for _cq in _COMPOUND_QUALS:
+                if _words[0].endswith(_cq) and len(_words[0]) > len(_cq) + 1:
+                    _prefix = _words[0][:-len(_cq)]
+                    _words = [_prefix, _cq]; _term = f"{_prefix} {_cq}"
+                    break
+        if len(_words) > 1 and any(w in _QUALIFIERS for w in _words):
+            _main   = [w for w in _words if w not in _QUALIFIERS]
+            _joined = _term.replace(" ", "")
+            _q_exception_phrases.append((_term, _joined, _main))
+        else:
+            for _w in _words:
+                if _w not in _seen:
+                    _regular_tokens.append(_w)
+        for _w in _words:
+            if _w not in _seen:
                 q_tokens.append(_w); _seen.add(_w)
+
     if not q_tokens:
         return safe_json({"listings": [], "total": 0, "unit_type_stats": [], "house_type_stats": [], "delisted": []})
 
     def _score_entry(entry):
-        wset = entry["word_set"]
+        wset     = entry["word_set"]
+        desc_low = entry["desc"].lower()
         score, matched = 0, set()
-        for tok in q_tokens:
+        for tok in _regular_tokens:
             if tok in wset:
                 score += 3; matched.add(tok)
             elif any(w.startswith(tok) for w in wset if len(w) >= len(tok)):
@@ -2833,6 +2856,11 @@ def description_search_endpoint(
                 best = max((_SM(None, tok, w).ratio() for w in wset if abs(len(w) - len(tok)) <= 3), default=0)
                 if best >= 0.82:
                     score += 1; matched.add(tok)
+        for phrase, joined, main_words in _q_exception_phrases:
+            if phrase in desc_low or joined in desc_low:
+                score += 3; matched.add(phrase)
+            elif main_words and any(w in wset for w in main_words):
+                score += 2; matched.add(phrase)
         return score, matched
 
     def _make_snippet_hl(entry, matched):
