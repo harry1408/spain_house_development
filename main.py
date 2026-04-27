@@ -2934,7 +2934,7 @@ def description_search_endpoint(
         if max_price    and e["min_price"]        is not None and e["min_price"]        > max_price:    return False
         if min_m2       and e["max_pm2"]          is not None and e["max_pm2"]          < min_m2:       return False
         if max_m2       and e["min_pm2"]          is not None and e["min_pm2"]          > max_m2:       return False
-        if max_beach_km and e["nearest_beach_km"] is not None and e["nearest_beach_km"] > max_beach_km: return False
+        if max_beach_km and (e["nearest_beach_km"] is None or e["nearest_beach_km"] > max_beach_km): return False
         return True
 
     def _search_index(dsi, dsi_words, dsi_word_idx):
