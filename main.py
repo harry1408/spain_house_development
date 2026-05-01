@@ -1,9 +1,20 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import pandas as pd
 import re, math, json, glob, os, io, urllib.request
+import threading, queue, datetime as _dt, calendar as _cal, sys, ast, time
 from typing import Optional, List
+from urllib.parse import urlparse, parse_qs
+
+try:
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    from bs4 import BeautifulSoup
+    _SCRAPER_DEPS = True
+except ImportError as _scraper_dep_err:
+    _SCRAPER_DEPS = False
 
 app = FastAPI(title="Housing Dashboard API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -529,6 +540,38 @@ def municipality_overview(municipality: Optional[List[str]] = Query(None),
     r["avg_price"]    = r["avg_price"].round(0)
     r["avg_price_m2"] = r["avg_price_m2"].round(1)
     return safe_json(r.sort_values("units", ascending=False).to_dict(orient="records"))
+
+@app.get("/charts/developer-overview")
+def developer_overview(municipality: Optional[List[str]] = Query(None),
+                       province:     Optional[List[str]] = Query(None),
+                       unit_type:    Optional[List[str]] = Query(None),
+                       year:         Optional[List[str]] = Query(None),
+                       esg:          Optional[List[str]] = Query(None),
+                       period:       Optional[List[str]] = Query(None),
+                       house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
+    if "developer" not in d.columns:
+        return safe_json([])
+    d = d[d["developer"].notna() & (d["developer"].astype(str).str.strip() != "")]
+    unit_counts = (
+        d.groupby("developer")
+        .agg(units=("price", "count"), listings=("listing_id", "nunique"))
+        .reset_index()
+    )
+    listing_avg = (
+        d.groupby(["developer", "listing_id"])
+        .agg(avg_price=("price", "mean"), avg_price_m2=("price_per_m2", "mean"))
+        .reset_index()
+    )
+    dev_avg = (
+        listing_avg.groupby("developer")
+        .agg(avg_price=("avg_price", "mean"), avg_price_m2=("avg_price_m2", "mean"))
+        .reset_index()
+    )
+    r = unit_counts.merge(dev_avg, on="developer", how="left")
+    r["avg_price"]    = r["avg_price"].round(0)
+    r["avg_price_m2"] = r["avg_price_m2"].round(1)
+    return safe_json(r.sort_values("units", ascending=False).head(15).to_dict(orient="records"))
 
 @app.get("/debug/municipality-overview")
 def debug_municipality_overview(muni: str = "Valencia"):
@@ -2234,6 +2277,221 @@ def listing_photos_for_apt(listing_id: int, sub_listing_id: int):
     full_resp = listing_photos(listing_id)
     full_data = _json.loads(full_resp.body)
     return safe_json({**full_data, "apt_specific": False})
+
+# ── Floor plan OCR ────────────────────────────────────────────────────────
+
+_FP_OCR_CACHE: dict = {}
+_FP_OCR_CACHE_FILE  = os.path.join(os.path.dirname(__file__), "floorplan_ocr_cache.json")
+_OCR_READER         = None
+
+try:
+    if os.path.exists(_FP_OCR_CACHE_FILE):
+        with open(_FP_OCR_CACHE_FILE, "r", encoding="utf-8") as _f:
+            _FP_OCR_CACHE = json.load(_f)
+except Exception:
+    pass
+
+# ── Floor plan LLM analysis cache ─────────────────────────────────────────
+_FP_LLM_CACHE: dict = {}
+_FP_LLM_CACHE_FILE  = os.path.join(os.path.dirname(__file__), "floorplan_llm_cache.json")
+
+def _reload_llm_cache():
+    global _FP_LLM_CACHE
+    try:
+        if os.path.exists(_FP_LLM_CACHE_FILE):
+            with open(_FP_LLM_CACHE_FILE, "r", encoding="utf-8") as _f:
+                _FP_LLM_CACHE = json.load(_f)
+    except Exception:
+        pass
+
+_reload_llm_cache()
+
+@app.get("/listing/floorplan/llm")
+def floorplan_llm_data(url: str = Query(...)):
+    """Return LLM-extracted floor plan analysis from cache (pre-computed by analyze_floorplans_llm.py)."""
+    _reload_llm_cache()
+    if url in _FP_LLM_CACHE:
+        return safe_json(_FP_LLM_CACHE[url])
+    return safe_json({"error": "not_cached", "message": "Run analyze_floorplans_llm.py to generate data for this URL"})
+
+def _get_ocr_reader():
+    global _OCR_READER
+    if _OCR_READER is None:
+        os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+        import easyocr
+        _OCR_READER = easyocr.Reader(["en", "es"], gpu=False, verbose=False)
+    return _OCR_READER
+
+_ROOM_NAMES = {
+    "dormitorio":"Bedroom","dormitorios":"Bedroom","habitacion":"Bedroom","habitación":"Bedroom",
+    "salon":"Living Room","salón":"Living Room","sala":"Living Room","estar":"Living Room",
+    "comedor":"Dining Room",
+    "cocina":"Kitchen",
+    "baño":"Bathroom","bano":"Bathroom","bathroom":"Bathroom",
+    "aseo":"WC","wc":"WC","toilet":"WC",
+    "terraza":"Terrace","terrace":"Terrace","balcon":"Balcony","balcón":"Balcony","balcony":"Balcony",
+    "pasillo":"Hallway","hall":"Hallway","entrada":"Entrance",
+    "trastero":"Storage","storage":"Storage",
+    "garaje":"Garage","garage":"Garage",
+    "jardin":"Garden","jardín":"Garden","garden":"Garden",
+    "estudio":"Study","despacho":"Study","office":"Office",
+    "lavadero":"Laundry","laundry":"Laundry",
+    "vestidor":"Dressing Room","armario":"Wardrobe",
+    "bedroom":"Bedroom","living":"Living Room","kitchen":"Kitchen","dining":"Dining Room",
+}
+
+_AREA_RE = re.compile(r'(\d{1,3}[,.]?\d{0,2})\s*(?:m[²2²?]|m\.?\s*2|mts\.?\s*2?)', re.IGNORECASE)
+_DIM_RE  = re.compile(r'([\d,O]{1,5}[,.][\dO]{1,3})\s*m?\s*[xX×]\s*([\d,O]{1,5}[,.][\dO]{1,3})', re.IGNORECASE)
+
+@app.get("/listing/floorplan/extract")
+def floorplan_extract_areas(url: str = Query(...)):
+    """Extract room names and areas from a floor plan image using EasyOCR."""
+    import io, requests as _req, numpy as _np
+    from PIL import Image as _PILImage, ImageEnhance as _IE
+
+    if url in _FP_OCR_CACHE:
+        return safe_json(_FP_OCR_CACHE[url])
+
+    # Download
+    try:
+        resp = _req.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+        from PIL import ImageFilter as _IF
+        pil = _PILImage.open(io.BytesIO(resp.content)).convert("L")  # grayscale
+        w, h = pil.size
+        pil = pil.resize((w * 2, h * 2), _PILImage.LANCZOS)          # 2× upscale
+        pil = _IE.Contrast(pil).enhance(2.0)                          # boost contrast
+        pil = _IE.Sharpness(pil).enhance(2.0)                         # sharpen
+        img_array = _np.array(pil.convert("RGB"))
+    except Exception as e:
+        return safe_json({"error": f"Download failed: {e}", "rows": [], "total_area": None})
+
+    # OCR
+    try:
+        reader = _get_ocr_reader()
+        raw = reader.readtext(img_array, detail=1, paragraph=False)
+    except Exception as e:
+        return safe_json({"error": f"OCR failed: {e}", "rows": [], "total_area": None})
+
+    def _center(bbox):
+        return (sum(p[0] for p in bbox) / 4, sum(p[1] for p in bbox) / 4)
+
+    def _norm(t):
+        return t.lower().strip().translate(str.maketrans("áéíóúàèìòùäëïöü","aeiouaeiouaeiou"))
+
+    items = [{"text": txt, "norm": _norm(txt), "cx": _center(bb)[0], "cy": _center(bb)[1], "conf": cf}
+             for bb, txt, cf in raw if cf > 0.25]
+
+    # Find area values (e.g. 14,50 m²)
+    area_items = []
+    for it in items:
+        m = _AREA_RE.search(it["text"])
+        if m:
+            try:
+                v = float(m.group(1).replace(",", "."))
+                if 1 < v < 500:
+                    area_items.append({**it, "area_m2": v})
+            except ValueError:
+                pass
+
+    # Find dimension pairs (e.g. 3,20 x 4,15)
+    dim_items = []
+    for it in items:
+        m = _DIM_RE.search(it["text"])
+        if m:
+            try:
+                d1 = float(m.group(1).replace(",", ".").replace("O", "0").replace("o", "0"))
+                d2 = float(m.group(2).replace(",", ".").replace("O", "0").replace("o", "0"))
+                dim_items.append({**it, "dim": f"{d1:.2f} × {d2:.2f} m", "area_calc": round(d1 * d2, 2)})
+            except ValueError:
+                pass
+
+    # Find room-name items (known vocab → English)
+    room_items = []
+    for it in items:
+        for word in it["norm"].split():
+            if word in _ROOM_NAMES:
+                room_items.append({**it, "room_en": _ROOM_NAMES[word]})
+                break
+
+    def _dist(a, b):
+        return ((a["cx"] - b["cx"]) ** 2 + (a["cy"] - b["cy"]) ** 2) ** 0.5
+
+    def _is_meas_text(t):
+        return bool(_AREA_RE.search(t) or _DIM_RE.search(t))
+
+    all_measurements = []
+    for a in area_items:
+        all_measurements.append({**a, "type": "area"})
+    for d in dim_items:
+        all_measurements.append({**d, "type": "dim"})
+
+    rows = []
+    for meas in all_measurements:
+        # Priority 1: recognised room word → English translation
+        room_label = None
+        if room_items:
+            nearest_room = min(room_items, key=lambda r: _dist(meas, r))
+            if _dist(meas, nearest_room) < 500:
+                room_label = nearest_room["room_en"]
+
+        # Priority 2: any adjacent non-measurement text (captures labels like
+        # "SUPERFICIE ÚTIL", "SALON", room identifiers, dimension prefixes)
+        nearby_label = None
+        if not room_label:
+            def _ok_label(it):
+                t = it["text"].strip()
+                return (it["text"] != meas["text"]
+                    and not _is_meas_text(it["text"])
+                    and 1 < len(t) <= 50
+                    and not re.match(r'^[\d\s,./\-:]+$', t)
+                    and not re.match(r'^m[²2?°]?$', t, re.I)
+                    and not re.match(r'^[A-Za-z]\d+[_\s][a-zA-Z]', t))
+            # Same-line: no distance cap (handles wide table layouts)
+            same_line = [it for it in items if _ok_label(it) and abs(it["cy"] - meas["cy"]) < 25]
+            # Other lines: 500px cap
+            other_line = [it for it in items if _ok_label(it) and abs(it["cy"] - meas["cy"]) >= 25 and _dist(meas, it) < 500]
+            pool = same_line if same_line else other_line
+            if pool:
+                nearby_label = min(pool, key=lambda it: _dist(meas, it))["text"]
+
+        if meas["type"] == "area":
+            rows.append({
+                "room": room_label,
+                "label": nearby_label,
+                "area_m2": meas["area_m2"],
+                "dimensions": None,
+            })
+        else:
+            rows.append({
+                "room": room_label,
+                "label": nearby_label,
+                "area_m2": meas.get("area_calc"),
+                "dimensions": meas["dim"],
+            })
+
+    # Deduplicate rows with same room + very close area values
+    seen = set()
+    deduped = []
+    for r in rows:
+        key = (r["room"], r["dimensions"], r["area_m2"])
+        if key not in seen:
+            seen.add(key)
+            deduped.append(r)
+    rows = deduped
+
+    total = round(sum(r["area_m2"] for r in rows if r["area_m2"] and r["dimensions"] is None), 2) \
+            if any(r["area_m2"] for r in rows) else None
+    result = {"rows": rows, "total_area": total, "raw_text": [it["text"] for it in items if it["conf"] > 0.4]}
+
+    _FP_OCR_CACHE[url] = result
+    try:
+        with open(_FP_OCR_CACHE_FILE, "w", encoding="utf-8") as _f:
+            json.dump(_FP_OCR_CACHE, _f)
+    except Exception:
+        pass
+
+    return safe_json(result)
 
 # ── Search page endpoints ─────────────────────────────────────────────────
 
@@ -3989,3 +4247,1028 @@ def resolve_url(url: str):
         return {"url": final_url}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── Scraper Pipeline API  (functions inlined from id_home_scrap.py) ───────────
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Global datadome cookie — set before each pipeline run
+datadome: str = ""
+
+_SC_HEADERS = {
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "accept-language": "en-GB,en;q=0.9,en-US;q=0.8,en-IN;q=0.7",
+    "priority": "u=0, i",
+    "sec-ch-device-memory": "8",
+    "sec-ch-ua": '"Not:A-Brand";v="99", "Microsoft Edge";v="145", "Chromium";v="145"',
+    "sec-ch-ua-arch": '"x86"',
+    "sec-ch-ua-full-version-list": '"Not:A-Brand";v="99.0.0.0", "Microsoft Edge";v="145.0.3800.58", "Chromium";v="145.0.7632.76"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-model": '""',
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "document",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-site": "none",
+    "sec-fetch-user": "?1",
+    "upgrade-insecure-requests": "1",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0",
+}
+
+def _sc_cookies():
+    raw = (
+        f"userUUID=f943f60d-9600-4449-8313-247b25d74430; "
+        f"SESSION=0a6f08ce8f40790a~34576419-c444-47bd-8a13-b908f7faebcc; "
+        f"PARAGLIDE_LOCALE=en; lang=en; datadome={datadome}"
+    )
+    return {c.split("=")[0]: "=".join(c.split("=")[1:]) for c in raw.split("; ")}
+
+# ── Helper: location breadcrumb ───────────────────────────────────────────────
+
+def extract_location_hierarchy(soup):
+    heading = soup.find(lambda tag: tag.name in ["h2","h3","h4"]
+                        and "location" in tag.get_text(strip=True).lower())
+    if not heading:
+        return None
+    container = heading.find_next()
+    lines = []
+    for item in container.find_all(["p","li","span"], recursive=True):
+        text = item.get_text(strip=True)
+        if text:
+            lines.append(text)
+    return ", ".join(filter(None, lines))
+
+# ── Helper: extract JS variable from page HTML ────────────────────────────────
+
+def extract_js_variable(html, var_name):
+    start = html.find(f"var {var_name}")
+    if start == -1:
+        return None
+    start = html.find("{", start)
+    brace_count = 0
+    end = start
+    for i in range(start, len(html)):
+        if html[i] == "{":
+            brace_count += 1
+        elif html[i] == "}":
+            brace_count -= 1
+        if brace_count == 0:
+            end = i + 1
+            break
+    js_object = html[start:end]
+    # try plain JSON first (works for most objects)
+    try:
+        return json.loads(js_object)
+    except Exception:
+        pass
+    # fallback: js2py (optional dependency)
+    try:
+        import js2py
+        ctx = js2py.EvalJs()
+        ctx.execute(f"var obj = {js_object};")
+        return ctx.obj.to_dict()
+    except Exception:
+        return None
+
+# ── Helper: second-level media/image scrape ───────────────────────────────────
+
+def scrape_idealista(url, html):
+    config = extract_js_variable(html, "config")
+    media  = extract_js_variable(html, "adMultimediasInfo")
+    detail = extract_js_variable(html, "adDetail")
+
+    result = {}
+    if config:
+        result["property_id"]        = config.get("propertyId")
+        result["agency"]             = config.get("adCommercialName")
+        result["contact_name"]       = config.get("adFirstName")
+        result["multimediaCarrousel"] = config.get("multimediaCarrousel")
+    if detail:
+        result["title"] = detail.get("headerTitle")
+
+    images, images_dic = [], []
+    if media and "fullScreenGalleryPics" in media:
+        for idx, img in enumerate(media["fullScreenGalleryPics"], 1):
+            u = img.get("imageDataService")
+            if u:
+                images.append(u)
+                images_dic.append({"url": u, "title": img.get("tag") or img.get("title") or f"image_{idx}"})
+    result["images"]     = images
+    result["images_dic"] = images_dic
+
+    plans = []
+    if media and "plans" in media:
+        for p in media["plans"]:
+            if p:
+                plans.append(p.get("imageDataService"))
+    result["floor_plans"] = plans
+
+    videos = []
+    if media and "videos" in media:
+        for v in media["videos"]:
+            if v:
+                videos.append(v.get("src"))
+    result["videos"] = videos
+
+    if result.get("multimediaCarrousel"):
+        try:
+            map_src = result["multimediaCarrousel"]["map"].get("src","")
+            result["map_link"] = map_src
+            q = parse_qs(urlparse(map_src).query)
+            lat, lon = q["center"][0].split(",")
+            result["lat"] = lat
+            result["lon"] = lon
+        except Exception:
+            pass
+
+    return result
+
+# ── Step 1: get municipality links ────────────────────────────────────────────
+
+def get_individual_localtion_new_home_links(province, month):
+    municipal_subs = {"valencia":"valencia-provincia","alicante":"alicante",
+                      "castellon":"castellon","murcia":"murcia-provincia"}
+    url = f"https://www.idealista.com/en/venta-obranueva/{municipal_subs.get(province, province)}/municipios"
+    BASE = "https://www.idealista.com"
+    r = requests.get(url, headers=_SC_HEADERS, cookies=_sc_cookies())
+    soup = BeautifulSoup(r.text, "lxml")
+    data = []
+    location_list = soup.select_one("#location_list")
+    if location_list:
+        for letter_block in location_list.find_all("li", recursive=False):
+            if not letter_block.select_one(".location_letter"):
+                continue
+            for m in letter_block.select("ul li"):
+                name_tag  = m.find("a")
+                count_tag = m.find("span")
+                if not name_tag:
+                    continue
+                count = None
+                if count_tag:
+                    try:
+                        count = int(count_tag.text.replace(",","").strip())
+                    except Exception:
+                        pass
+                data.append({
+                    "municipality": name_tag.text.strip(),
+                    "properties":   count,
+                    "link":         BASE + name_tag["href"],
+                })
+    out = f"{province}_municipalities_new_{month}.csv"
+    pd.DataFrame(data).to_csv(out, index=False, encoding="utf-8")
+    print(f"  Saved {out} ({len(data)} municipalities)")
+
+# ── Step 2: scrape listing pages per municipality ──────────────────────────────
+
+def get_html_listings(province, dev_type, month_name):
+    muni_file = f"{province}_municipalities_new_{month_name}.csv"
+    if not os.path.exists(muni_file):
+        print(f"  WARNING: {muni_file} not found, skipping get_html_listings")
+        return
+    file = pd.read_csv(muni_file)
+    BASE = "https://www.idealista.com"
+    all_properties = []
+    seen_urls = set()
+    done_properties = []
+
+    def extract_cards(html, sub_region):
+        soup = BeautifulSoup(html, "lxml")
+        extracted = []
+        for card in soup.select(".item-info-container"):
+            title_tag = card.select_one(".item-link")
+            if not title_tag:
+                continue
+            property_url = BASE + title_tag["href"]
+            if property_url in seen_urls:
+                continue
+            seen_urls.add(property_url)
+            agency_tag  = card.select_one(".logo-branding a")
+            logo_tag    = card.select_one(".logo-branding img")
+            price_tag   = card.select_one(".item-price")
+            desc_tag    = card.select_one(".item-description p")
+            details     = [d.text.strip() for d in card.select(".item-detail")]
+            bedrooms = size = None
+            extras = []
+            for d in details:
+                if "bed" in d.lower():   bedrooms = d
+                elif "m²" in d.lower():  size = d
+                else:                    extras.append(d)
+            extracted.append({
+                "sub_region":    sub_region,
+                "title":         title_tag.text.strip(),
+                "price":         price_tag.text.strip() if price_tag else None,
+                "bedrooms":      bedrooms,
+                "size_m2":       size,
+                "extra_features": ", ".join(extras),
+                "description":   desc_tag.text.strip() if desc_tag else None,
+                "property_url":  property_url,
+                "agency_name":   agency_tag.get("title") if agency_tag else None,
+                "agency_url":    BASE + agency_tag["href"] if agency_tag else None,
+                "agency_logo":   logo_tag["src"] if logo_tag else None,
+            })
+        return extracted
+
+    for _, row in file.iterrows():
+        sub_region = str(row["municipality"]).replace("/","-")
+        sub_link   = row["link"]
+        if sub_region in done_properties:
+            continue
+        done_properties.append(sub_region)
+        expected = int(str(row["properties"]).replace(",","")) if pd.notna(row.get("properties")) else None
+        print(f"\n====== {sub_region} ======")
+        page, collected = 1, 0
+        while True:
+            url = sub_link if page == 1 else sub_link.rstrip("/") + f"/pagina-{page}.htm"
+            print("Scraping:", url)
+            r = requests.get(url, headers=_SC_HEADERS, cookies=_sc_cookies())
+            if r.status_code != 200:
+                print("Blocked or finished")
+                break
+            listings = extract_cards(r.text, sub_region)
+            if not listings:
+                break
+            all_properties.extend(listings)
+            collected += len(listings)
+            print(f"Collected {collected} / expected {expected}")
+            if expected and collected >= expected:
+                break
+            page += 1
+            time.sleep(1)
+        df_out = pd.DataFrame(all_properties)
+        df_out.to_csv(f"region/{sub_region}_{province}_properties_full_{dev_type}_{month_name}.csv", index=False)
+        print(f"Saved {len(df_out)} properties for {province}")
+
+# ── Step 3: scrape individual listing detail pages ────────────────────────────
+
+def _extract_listing_data(URL, lnk_info, BASE, soup, html):
+    data = {}
+    data["type"]     = lnk_info.get("type")
+    data["main"]     = lnk_info.get("main")
+    data["municipal"] = lnk_info.get("area")
+    data["url"]      = URL
+    data["listing_id"] = URL.rstrip("/").split("/")[-1]
+
+    title_tag = soup.select_one("span.main-info__title-main")
+    data["title"] = title_tag.text.strip() if title_tag else None
+
+    price = price_m2 = None
+    price_section = soup.select_one(".price-features__container")
+    if price_section:
+        for row in price_section.select(".flex-feature"):
+            text = row.get_text(" ", strip=True).lower()
+            if "property price" in text:
+                strong = row.select_one("strong")
+                if strong:
+                    price = strong.text.strip()
+            elif "price per m²" in text or "price per m2" in text:
+                spans = row.select("span")
+                if len(spans) > 1:
+                    price_m2 = spans[1].text.strip()
+    if not price:
+        tag = soup.select_one(".info-data-price")
+        price = tag.text.strip() if tag else None
+    data["price"]        = price
+    data["price_per_m2"] = price_m2
+
+    area_m2 = None
+    fb = soup.select_one(".info-features")
+    if fb:
+        for sp in fb.select("span"):
+            if "m²" in sp.get_text(strip=True).lower():
+                area_m2 = sp.get_text(strip=True)
+                break
+    data["area"] = area_m2
+
+    minor = soup.select_one(".main-info__title-minor")
+    data["location_text"] = minor.text.strip() if minor else None
+
+    desc = soup.select_one(".comment")
+    data["description"] = desc.text.strip() if desc else None
+
+    json_ld = {}
+    script = soup.find("script", type="application/ld+json")
+    if script:
+        try:
+            json_ld = json.loads(script.string)
+        except Exception:
+            pass
+    data["full_address"] = ""
+    if json_ld:
+        address = json_ld.get("address", {})
+        data["full_address"] = ", ".join(filter(None, [
+            address.get("streetAddress"), address.get("postalCode"),
+            address.get("addressLocality"), address.get("addressRegion"),
+            address.get("addressCountry"),
+        ]))
+        geo = json_ld.get("geo", {})
+        data["latitude_ld"]  = geo.get("latitude")
+        data["longitude_ld"] = geo.get("longitude")
+
+    features = {}
+    for item in soup.select(".details-property-feature-one li, .details-property-feature-two li"):
+        lbl = item.select_one("span")
+        val = item.select_one("strong")
+        if lbl and val:
+            features[lbl.text.strip()] = val.text.strip()
+        else:
+            text = item.get_text(" ", strip=True)
+            if text:
+                features[text] = True
+    data["features"] = ", ".join(
+        k if v is True else f"{k}: {v}" for k, v in features.items()
+    )
+
+    energy_data = {}
+    for block in soup.select(".details-property-feature-two"):
+        headings = [h.get_text(strip=True) for h in block.select("h2")]
+        if any("certificate" in h.lower() for h in headings):
+            for row_el in block.select(".details-property_features li"):
+                spans = row_el.select("span")
+                if len(spans) < 2:
+                    continue
+                lbl = spans[0].text.strip().replace(":","")
+                rating = None
+                for cls in spans[-1].get("class",[]):
+                    if "icon-energy" in cls:
+                        rating = cls.split("-")[-1].upper()
+                if lbl and rating:
+                    energy_data[lbl] = rating
+    data["energy_certificate"]       = ", ".join(f"{k}: {v}" for k,v in energy_data.items()) if energy_data else None
+    energy_tag                        = soup.select_one(".energy-certificate")
+    data["other_energy_certificate"]  = energy_tag.text.strip() if energy_tag else None
+
+    for s in soup.select(".stats-text"):
+        text = s.text.lower()
+        if "updated" in text:  data["last_updated"] = s.text.strip()
+        if "views"   in text:  data["views"]        = s.text.strip()
+        if "saved"   in text:  data["saved"]        = s.text.strip()
+
+    agency = soup.select_one(".professional-name")
+    data["agency_name"] = agency.text.strip() if agency else None
+    data["agency_link"] = ""
+    agency_link = soup.select_one(".professional-name a")
+    if agency_link:
+        try:
+            data["agency_link"] = BASE + agency_link["href"]
+        except Exception:
+            pass
+
+    # images via scrape_idealista
+    sl = scrape_idealista(URL, html)
+    data["images"]     = sl.get("images", [])
+    data["images_dic"] = sl.get("images_dic", [])
+    data["latitude"]   = sl.get("lat", "")
+    data["longitude"]  = sl.get("lon", "")
+    data["map"]        = sl.get("map_link", "")
+
+    data["location_hierarchy"] = extract_location_hierarchy(soup)
+
+    # new development unit table
+    new_dev_units = []
+    dev_title_tag = soup.select_one(".table__tittle")
+    dev_title     = dev_title_tag.text.strip() if dev_title_tag else None
+    for row_el in soup.select(".table__row"):
+        link = row_el.get("href")
+        full_link = BASE + link if link else None
+        cells = row_el.select(".table__cell")
+        if not cells:
+            continue
+        main_cell     = row_el.select_one(".table__go-to-property")
+        property_type = price_val = None
+        if main_cell:
+            try:
+                property_type = main_cell.contents[0].strip()
+            except Exception:
+                pass
+            strong = main_cell.select_one("strong")
+            if strong:
+                price_val = strong.text.strip()
+        beds = size_val = floor_val = extras_val = None
+        if len(cells) > 1: beds      = cells[1].text.strip()
+        if len(cells) > 2: size_val  = cells[2].text.strip()
+        if len(cells) > 3: floor_val = cells[3].text.strip()
+        if len(cells) > 4: extras_val= cells[4].text.strip()
+        new_dev_units.append({
+            "development_title": dev_title,
+            "property_type":     property_type,
+            "price":             price_val,
+            "bedrooms":          beds,
+            "size":              size_val,
+            "floor":             floor_val,
+            "extras":            extras_val,
+            "url":               full_link,
+        })
+    data["new_development_units"]        = new_dev_units if new_dev_units else ""
+    data["new_development_units_number"] = len(new_dev_units) if new_dev_units else ""
+    return data, [u["url"] for u in new_dev_units if u.get("url")]
+
+
+def get_indivdual_listing(province, dev_type, month_name):
+    folder_path = f"{province}_chunks/"
+    all_links, all_rows, main_links = [], [], []
+    file_iter = 1
+    BASE = "https://www.idealista.com"
+
+    files = [f for f in glob.glob(os.path.join("region","*.csv"))
+             if province in os.path.basename(f).lower()
+             and "new" in os.path.basename(f).lower()
+             and month_name in os.path.basename(f).lower()]
+    print(f"Files found: {len(files)}")
+
+    for file in files:
+        area = os.path.basename(file).split(f"_{province}_properties_full")[0]
+        df_f = pd.read_csv(file)
+        col  = "property_url" if "property_url" in df_f.columns else "url"
+        if col in df_f.columns:
+            for lnk in df_f[col]:
+                if lnk in all_links:
+                    continue
+                all_links.append(lnk)
+                main_links.append({"url": lnk, "type": "main", "main": "NA", "area": area})
+
+    print(f"Total Links: {len(all_links)}")
+
+    for lnk_info in main_links:
+        URL = lnk_info["url"]
+        print(URL)
+        r = requests.get(URL, headers=_SC_HEADERS, cookies=_sc_cookies())
+        soup = BeautifulSoup(r.text, "lxml")
+        data, sub_urls = _extract_listing_data(URL, lnk_info, BASE, soup, r.text)
+
+        # queue sub-unit URLs
+        for sub_url in sub_urls:
+            if sub_url not in all_links:
+                all_links.append(sub_url)
+                listing_id = URL.rstrip("/").split("/")[-1]
+                main_links.append({"url": sub_url, "type": "sub-link", "main": URL, "area": lnk_info["area"]})
+
+        all_rows.append(data)
+        if len(all_rows) == 500:
+            pd.DataFrame(all_rows).to_csv(
+                f"{folder_path}{province}_all_data_{file_iter}_{dev_type}_{month_name}.csv",
+                index=False, encoding="utf-8")
+            all_rows = []
+            file_iter += 1
+
+    if all_rows:
+        pd.DataFrame(all_rows).to_csv(
+            f"{folder_path}{province}_all_data_last_{file_iter}_{dev_type}_{month_name}.csv",
+            index=False, encoding="utf-8")
+
+# ── Step 4: scrape sub-flat detail pages ──────────────────────────────────────
+
+def get_indivdual_last_listing(province, month):
+    folder_path = f"{province}_chunks/"
+    all_links, all_rows, main_links = [], [], []
+    file_iter = 1
+    BASE = "https://www.idealista.com"
+
+    files = [f for f in glob.glob(os.path.join(folder_path,"*.csv"))
+             if province in os.path.basename(f).lower()
+             and "new" in os.path.basename(f).lower()
+             and month in os.path.basename(f).lower()]
+    print(f"Sub-flat source files: {len(files)}")
+
+    for file in files:
+        try:
+            xls = pd.read_csv(file)
+        except Exception as e:
+            print(f"Error reading {file}: {e}")
+            continue
+        df_f = xls[xls["new_development_units_number"].notna() &
+                   (xls["new_development_units_number"] != "")]
+        for col_val in df_f["new_development_units"]:
+            try:
+                json_data = json.loads(str(col_val).replace("'",'"').replace("None","null"))
+            except Exception:
+                try:
+                    json_data = ast.literal_eval(str(col_val))
+                except Exception:
+                    continue
+            for obj in json_data:
+                lnk = obj.get("url")
+                if not lnk or lnk in all_links:
+                    continue
+                ids = re.findall(r"/(\d+)/", lnk)
+                prop_id = ids[0] if ids else "NA"
+                all_links.append(lnk)
+                main_links.append({"url": lnk, "type": "sub flat", "main": prop_id,
+                                   "area": f"reference from {prop_id}"})
+
+    print(f"Total sub-flat links: {len(all_links)}")
+
+    for lnk_info in main_links:
+        URL = lnk_info["url"]
+        print(URL)
+        r = requests.get(URL, headers=_SC_HEADERS, cookies=_sc_cookies())
+        soup = BeautifulSoup(r.text, "lxml")
+        data, _ = _extract_listing_data(URL, lnk_info, BASE, soup, r.text)
+        all_rows.append(data)
+        if len(all_rows) == 500:
+            pd.DataFrame(all_rows).to_csv(
+                f"{folder_path}{province}_all_data_sub_flats_{month}_{file_iter}.csv",
+                index=False, encoding="utf-8")
+            all_rows = []
+            file_iter += 1
+
+    if all_rows:
+        pd.DataFrame(all_rows).to_csv(
+            f"{folder_path}{province}_all_data_last_sub_flats_{month}_{file_iter}.csv",
+            index=False, encoding="utf-8")
+
+# ── Step 5: combine sub-flat chunk CSVs ───────────────────────────────────────
+
+def final_sheet_subflats(province, month):
+    folder_path = f"{province}_chunks/"
+    files = [f for f in glob.glob(os.path.join(folder_path,"*.csv"))
+             if province in os.path.basename(f).lower()
+             and "sub_flats" in os.path.basename(f).lower()
+             and month in os.path.basename(f).lower()]
+    print(f"Sub-flat files to combine: {len(files)}")
+    if not files:
+        print("No sub-flat files found.")
+        return
+    dfs = [pd.read_csv(f, low_memory=False) for f in files]
+    combined = pd.concat(dfs, ignore_index=True)
+    out = f"{province}_all_sub_flats_{month}_units.xlsx"
+    combined.to_excel(out, index=False)
+    print(f"Saved {out} ({len(combined)} rows)")
+
+# ── Step 6: build final all-units xlsx ────────────────────────────────────────
+
+def final_sheet_all_units(province, month):
+    import numpy as np
+
+    sub_flats_file = f"{province}_all_sub_flats_{month}_units.xlsx"
+    if not os.path.exists(sub_flats_file):
+        print(f"WARNING: {sub_flats_file} not found — features columns will be missing")
+        features_df = pd.DataFrame()
+    else:
+        features_df = pd.read_excel(sub_flats_file)
+        if "listing_id" in features_df.columns:
+            features_df = features_df.rename(columns={"listing_id": "sub_listing_id"})
+        keep = [c for c in ["sub_listing_id","images","images_dic","map","latitude","longitude","features"]
+                if c in features_df.columns]
+        features_df = features_df[keep]
+
+    folder_path = f"{province}_chunks/"
+    files = [f for f in glob.glob(os.path.join(folder_path,"*.csv"))
+             if province in os.path.basename(f).lower()
+             and "new" in os.path.basename(f).lower()
+             and month in os.path.basename(f).lower()]
+    print(f"Main chunk files: {len(files)}")
+    if not files:
+        print("No main chunk files found.")
+        return
+
+    df_list = [pd.read_csv(f, low_memory=False) for f in files]
+    combined_df = pd.concat(df_list, ignore_index=True)
+    df = combined_df.copy()
+    df.columns = df.columns.str.strip()
+
+    # filter rows that have new_development_units
+    df = df[df["new_development_units"].notna() &
+            (df["new_development_units"].astype(str).str.strip() != "") &
+            (df["new_development_units"].astype(str).str.strip() != "[]")].copy()
+    print(f"Developments with units: {len(df)}")
+
+    def parse_units_safe(text):
+        if not isinstance(text, str):
+            return None
+        text = re.sub(r'"extras":\s*,', '"extras": null,', text)
+        try:
+            return ast.literal_eval(text)
+        except Exception:
+            try:
+                return json.loads(text.replace("'",'"').replace("None","null"))
+            except Exception:
+                return None
+
+    def clean_price(value):
+        if not isinstance(value, str):
+            return None
+        if "ask" in value.lower() or "request" in value.lower():
+            return None
+        m = re.search(r'[\d.,]+', value)
+        if m:
+            return float(m.group().replace('.','').replace(',',''))
+        return None
+
+    def clean_area(value):
+        if not isinstance(value, str):
+            return None
+        m = re.search(r'\d+', value)
+        return float(m.group()) if m else None
+
+    def detect_unit_type(u):
+        ptype    = str(u.get("property_type","")).lower()
+        bedrooms = str(u.get("bedrooms","")).lower()
+        text     = ptype + " " + bedrooms
+        if "studio" in text:
+            return "Studio"
+        if "penthouse" in text or "ático" in text:
+            return "Penthouse"
+        m = re.search(r'(\d+)', bedrooms)
+        if m:
+            return f"{m.group(1)}BR"
+        return None
+
+    def extract_delivery_date(text):
+        if not isinstance(text, str):
+            return None
+        tl = text.lower()
+        if "delivery" in tl:
+            return "Delivery " + tl.split("delivery")[-1].split(",")[0].strip()
+        if "entrega" in tl:
+            return "Delivery " + tl.split("entrega")[-1].split(",")[0].strip()
+        return None
+
+    def extract_amenities(text):
+        if not isinstance(text, str):
+            return None
+        txt = text.lower()
+        for kw in ("delivery","entrega"):
+            if kw in txt:
+                txt = txt.split(kw)[0]
+        return txt.strip().title()
+
+    rows, unit_counts = [], {}
+    for _, row in df.iterrows():
+        units = parse_units_safe(row["new_development_units"])
+        if not units:
+            continue
+        unit_counts[row["listing_id"]] = len(units)
+        for u in units:
+            ut    = detect_unit_type(u)
+            if not ut:
+                continue
+            price = clean_price(u.get("price"))
+            size  = clean_area(u.get("size"))
+            if not price:
+                continue
+            rows.append({
+                "listing_id":  row["listing_id"],
+                "unit_type":   ut,
+                "price":       price,
+                "size":        size,
+                "price_per_m2": price/size if size else None,
+                "floor":       u.get("floor"),
+                "unit_url":    u.get("url"),
+            })
+
+    units_df = pd.DataFrame(rows)
+    if units_df.empty:
+        print("No units extracted.")
+        return
+
+    units_df["sub_listing_id"] = (
+        units_df["unit_url"].astype(str)
+        .str.split("?").str[0].str.rstrip("/").str.split("/").str[-1]
+    )
+    print(f"Units extracted: {len(units_df)}")
+
+    # property type per development
+    property_type_map = units_df.groupby("listing_id")["unit_type"].apply(list)
+    def classify_property(types):
+        result = []
+        if "Studio" in types:    result.append("Studio")
+        if any(t.endswith("BR") for t in types): result.append("Flat / Apartment")
+        if "Penthouse" in types: result.append("Penthouse")
+        return ", ".join(result)
+    property_type_df = property_type_map.apply(classify_property).reset_index()
+    property_type_df.columns = ["listing_id","property_type"]
+
+    unit_count_df = pd.DataFrame(list(unit_counts.items()),
+                                 columns=["listing_id","new_development_units_numbers"])
+
+    # property info
+    df["property_name"]  = df["title"].apply(lambda x: str(x).split("New home development:")[-1].split("by")[0].strip())
+    df["developer"]      = df["title"].apply(lambda x: str(x).split("by")[-1].strip())
+    df["city_area"]      = df.get("location_hierarchy", df.get("location_text",""))
+    df["province"]       = province
+    df["delivery_date"]  = df["features"].apply(extract_delivery_date)
+    df["municipality"]   = df.get("location_text", df.get("municipal",""))
+    df["amenities"]      = df["features"].apply(extract_amenities)
+    df["esg_certificate"] = (
+        df["energy_certificate"].fillna(df.get("other_energy_certificate",""))
+        .astype(str).str.strip().replace("", None)
+    )
+
+    info_df = df[[c for c in [
+        "listing_id","property_name","developer","city_area","municipality",
+        "province","delivery_date","amenities","esg_certificate","last_updated"
+    ] if c in df.columns]].drop_duplicates()
+
+    final_units = (
+        units_df
+        .merge(info_df,           on="listing_id", how="left")
+        .merge(property_type_df,  on="listing_id", how="left")
+        .merge(unit_count_df,     on="listing_id", how="left")
+    )
+
+    if not features_df.empty and "sub_listing_id" in features_df.columns:
+        final_units["sub_listing_id"] = final_units["sub_listing_id"].astype(str)
+        features_df["sub_listing_id"] = features_df["sub_listing_id"].astype(str)
+        final_units = final_units.merge(features_df, on="sub_listing_id", how="left")
+        if "features" in final_units.columns:
+            final_units["amenities"] = (
+                final_units["features"].astype(str)
+                .str.split(r"(?i)(Consumption|Emissions|In process)", n=1, regex=True)
+                .str[0].str.rstrip(", ").str.strip()
+            )
+            final_units = final_units.drop("features", axis=1)
+
+    final_units = final_units.drop_duplicates()
+    out = f"{province}_all_{month}_units.xlsx"
+    final_units.to_excel(out, index=False)
+    print(f"Saved {out} ({len(final_units)} rows)")
+
+# ── Step 8: expired listings ──────────────────────────────────────────────────
+
+def spain_expired_listings(dev_type, month_name):
+    sold_file = "sold_out_properties.xlsx"
+    if not os.path.exists(sold_file):
+        print(f"  {sold_file} not found, skipping")
+        return
+    df = pd.read_excel(sold_file)
+    BASE = "https://www.idealista.com"
+    results = []
+    for _, row in df.iterrows():
+        url         = row.get("Link","")
+        sub_listing = row.get("Unit ID","")
+        if not url:
+            continue
+        print(url)
+        r = requests.get(url, headers=_SC_HEADERS, cookies=_sc_cookies())
+        soup = BeautifulSoup(r.text, "lxml")
+        date_tag     = soup.find("p", class_="deactivated-detail_date")
+        removed_date = None
+        if date_tag:
+            m = re.search(r'\d{2}/\d{2}/\d{4}', date_tag.get_text(strip=True))
+            if m:
+                removed_date = m.group(0)
+        results.append({"url": url, "sub_listing": sub_listing, "removed_date": removed_date})
+        print(f"Processed: {url}")
+    out = f"expired_listing_{month_name}.xlsx"
+    pd.DataFrame(results).to_excel(out, index=False)
+    print(f"Saved {out}")
+
+# ── Post-pipeline: merge into main data sheet ─────────────────────────────────
+
+def _merge_into_main(province: str, month_name: str, year: int, dev_type: str):
+    scraped_file = os.path.join(_SCRIPT_DIR, f"{province}_all_{month_name.lower()}_units.xlsx")
+    if not os.path.exists(scraped_file):
+        _sc_log(f"  WARNING: {os.path.basename(scraped_file)} not found — skipping merge")
+        return
+
+    new_df = pd.read_excel(scraped_file)
+    new_df["development"] = dev_type.title()
+    new_df["Month"]       = month_name
+    new_df["Year"]        = year
+
+    candidates = [
+        f for f in glob.glob(os.path.join(_DATA_DIR, "*.xlsx"))
+        if province.lower() in os.path.basename(f).lower()
+        and "expired" not in os.path.basename(f).lower()
+    ]
+
+    if not candidates:
+        out_path = os.path.join(_DATA_DIR, f"{province}_all.xlsx")
+        new_df.to_excel(out_path, index=False)
+        _sc_log(f"  Created new main file: {os.path.basename(out_path)}")
+        return
+
+    main_file = candidates[0]
+    _sc_log(f"  Merging {len(new_df)} rows into {os.path.basename(main_file)} …")
+    existing = pd.read_excel(main_file)
+
+    if "Month" in existing.columns and "Year" in existing.columns:
+        mask    = (existing["Month"] == month_name) & (existing["Year"].astype(str) == str(year))
+        dropped = int(mask.sum())
+        if dropped:
+            _sc_log(f"  Removed {dropped} existing rows for {month_name} {year}")
+        existing = existing[~mask]
+
+    merged = pd.concat([existing, new_df], ignore_index=True)
+    merged.to_excel(main_file, index=False)
+    _sc_log(f"  Merge done — {os.path.basename(main_file)} now {len(merged)} rows")
+
+
+def _compute_and_run_expired(province: str, month_name: str, month: int, year: int, dev_type: str):
+    prev_month_num  = month - 1 if month > 1 else 12
+    prev_year       = year if month > 1 else year - 1
+    prev_month_name = _cal.month_name[prev_month_num]  # title-case e.g. "April"
+
+    curr_file = os.path.join(_SCRIPT_DIR, f"{province}_all_{month_name.lower()}_units.xlsx")
+
+    if not os.path.exists(curr_file):
+        _sc_log(f"  Current month file missing: {os.path.basename(curr_file)}")
+        return
+
+    curr_df = pd.read_excel(curr_file)
+
+    # Load previous month data from the main province sheet in data/
+    candidates = [
+        f for f in glob.glob(os.path.join(_DATA_DIR, "*.xlsx"))
+        if province.lower() in os.path.basename(f).lower()
+        and "expired" not in os.path.basename(f).lower()
+    ]
+    if not candidates:
+        _sc_log(f"  No main data file found for {province} — skipping expired step")
+        return
+
+    main_file = candidates[0]
+    main_df   = pd.read_excel(main_file)
+
+    if "Month" not in main_df.columns or "Year" not in main_df.columns:
+        _sc_log(f"  Main file has no Month/Year columns — skipping expired step")
+        return
+
+    prev_df = main_df[
+        (main_df["Month"].astype(str).str.strip().str.lower() == prev_month_name.lower()) &
+        (main_df["Year"].astype(str).str.strip() == str(prev_year))
+    ]
+
+    if prev_df.empty:
+        _sc_log(f"  No {prev_month_name} {prev_year} rows in {os.path.basename(main_file)} — skipping expired step")
+        return
+
+    _sc_log(f"  Found {len(prev_df)} prev-month rows from {os.path.basename(main_file)}")
+    curr_ids = set(curr_df["sub_listing_id"].astype(str).str.strip())
+    prev_ids = set(prev_df["sub_listing_id"].astype(str).str.strip())
+    sold_ids = prev_ids - curr_ids
+    _sc_log(f"  {len(sold_ids)} sold-out units")
+
+    if not sold_ids:
+        _sc_log("  No sold-out units — skipping expired step")
+        return
+
+    sold_rows = prev_df[prev_df["sub_listing_id"].astype(str).str.strip().isin(sold_ids)]
+    sold_out  = pd.DataFrame({"Link": sold_rows["unit_url"].values,
+                               "Unit ID": sold_rows["sub_listing_id"].values})
+    sold_out_path = os.path.join(_SCRIPT_DIR, "sold_out_properties.xlsx")
+    sold_out.to_excel(sold_out_path, index=False)
+    _sc_log(f"  Wrote {os.path.basename(sold_out_path)} ({len(sold_out)} rows)")
+
+    spain_expired_listings(dev_type, month_name)
+
+    exp_month_file = os.path.join(_SCRIPT_DIR, f"expired_listing_{month_name}.xlsx")
+    main_exp_file  = os.path.join(_DATA_DIR,   "expired_listing.xlsx")
+    if os.path.exists(exp_month_file):
+        new_exp = pd.read_excel(exp_month_file)
+        if os.path.exists(main_exp_file):
+            existing_exp = pd.read_excel(main_exp_file)
+            merged_exp   = pd.concat([existing_exp, new_exp], ignore_index=True)
+            key_col = "sub_listing" if "sub_listing" in merged_exp.columns else merged_exp.columns[0]
+            merged_exp = merged_exp.drop_duplicates(subset=[key_col])
+        else:
+            merged_exp = new_exp
+        merged_exp.to_excel(main_exp_file, index=False)
+        _sc_log(f"  Updated {os.path.basename(main_exp_file)} ({len(merged_exp)} rows)")
+
+# ── Scraper state & logger ────────────────────────────────────────────────────
+
+PIPELINE_STEPS = ["links","html","listings","subflats","combine","final_sheet","merge","expired"]
+
+_scraper_state: dict = {
+    "running":     False,
+    "step":        "",
+    "steps_done":  [],
+    "error":       None,
+}
+_scraper_log_q: queue.Queue = queue.Queue()
+
+def _sc_log(msg: str):
+    ts   = _dt.datetime.now().strftime("%H:%M:%S")
+    line = f"[{ts}] {msg}"
+    print(f"[scraper] {line}", flush=True)
+    _scraper_log_q.put(line)
+
+def _run_pipeline(provinces: list, datadome_val: str, dev_type: str):
+    original_cwd = os.getcwd()
+    _scraper_state["running"]    = True
+    _scraper_state["error"]      = None
+    _scraper_state["steps_done"] = []
+    _scraper_state["step"]       = ""
+
+    try:
+        global datadome
+        datadome = datadome_val
+        os.chdir(_SCRIPT_DIR)
+
+        now        = _dt.datetime.now()
+        month      = now.month
+        month_name = _cal.month_name[month]
+        year       = now.year
+
+        for prov in provinces:
+            _sc_log(f"{'='*50}")
+            _sc_log(f"Starting province: {prov.upper()}")
+            _sc_log(f"{'='*50}")
+
+            os.makedirs(os.path.join(_SCRIPT_DIR, f"{prov}_chunks"), exist_ok=True)
+            os.makedirs(os.path.join(_SCRIPT_DIR, "region"),         exist_ok=True)
+
+            step_map = {
+                "links":        lambda: get_individual_localtion_new_home_links(prov, month_name),
+                "html":         lambda: get_html_listings(prov, dev_type, month_name),
+                "listings":     lambda: get_indivdual_listing(prov, dev_type, month_name.lower()),
+                "subflats":     lambda: get_indivdual_last_listing(prov, month_name.lower()),
+                "combine":      lambda: final_sheet_subflats(prov, month_name.lower()),
+                "final_sheet":  lambda: final_sheet_all_units(prov, month_name.lower()),
+                "merge":        lambda: _merge_into_main(prov, month_name, year, dev_type),
+                "expired":      lambda: _compute_and_run_expired(prov, month_name, month, year, dev_type),
+            }
+
+            for step_id in PIPELINE_STEPS:
+                _scraper_state["step"] = f"{prov}:{step_id}"
+                _sc_log(f"[{prov}] >> {step_id} …")
+                try:
+                    step_map[step_id]()
+                    _sc_log(f"[{prov}] << {step_id} OK")
+                except Exception as e:
+                    import traceback
+                    _sc_log(f"[{prov}] !! {step_id} FAILED: {e}")
+                    _sc_log(traceback.format_exc())
+                    raise
+
+            _scraper_state["steps_done"].append(prov)
+            _sc_log(f"{prov.upper()} COMPLETE")
+
+        _sc_log("ALL PROVINCES DONE")
+
+    except Exception as e:
+        import traceback
+        _sc_log(f"PIPELINE ERROR: {e}")
+        _sc_log(traceback.format_exc())
+        _scraper_state["error"] = str(e)
+    finally:
+        _scraper_state["running"] = False
+        _scraper_state["step"]    = ""
+        _sc_log("__DONE__")
+        try:
+            os.chdir(original_cwd)
+        except Exception:
+            pass
+
+
+# ── API endpoints ─────────────────────────────────────────────────────────────
+
+@app.post("/scraper/start")
+async def scraper_start(req: Request):
+    body         = await req.json()
+    datadome_val = str(body.get("datadome", "")).strip()
+    provinces    = body.get("provinces", ["valencia"])
+    dev_type     = str(body.get("dev_type", "new")).lower()
+
+    if not datadome_val:
+        return JSONResponse({"ok": False, "error": "datadome is required"})
+    if _scraper_state["running"]:
+        return JSONResponse({"ok": False, "error": "Pipeline already running"})
+    if not provinces:
+        return JSONResponse({"ok": False, "error": "Select at least one province"})
+
+    # flush old logs
+    while not _scraper_log_q.empty():
+        try:
+            _scraper_log_q.get_nowait()
+        except queue.Empty:
+            break
+
+    t = threading.Thread(
+        target=_run_pipeline,
+        args=(provinces, datadome_val, dev_type),
+        daemon=True,
+    )
+    t.start()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/scraper/status")
+def scraper_status():
+    return safe_json({
+        "running":    _scraper_state["running"],
+        "step":       _scraper_state["step"],
+        "steps_done": _scraper_state["steps_done"],
+        "error":      _scraper_state["error"],
+    })
+
+
+@app.get("/scraper/logs")
+def scraper_logs():
+    """SSE stream — one log line per event."""
+    def generate():
+        yield "data: connected\n\n"
+        while True:
+            try:
+                msg  = _scraper_log_q.get(timeout=25)
+                safe = msg.replace("\n", " ").replace("\r", "")
+                yield f"data: {safe}\n\n"
+            except queue.Empty:
+                yield "data: __ping__\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

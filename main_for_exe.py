@@ -2229,6 +2229,177 @@ def listing_photos_for_apt(listing_id: int, sub_listing_id: int):
     full_data = _json.loads(full_resp.body)
     return safe_json({**full_data, "apt_specific": False})
 
+# ── Floor plan OCR ────────────────────────────────────────────────────────
+
+_FP_OCR_CACHE: dict = {}
+_FP_OCR_CACHE_FILE  = os.path.join(os.path.dirname(__file__), "floorplan_ocr_cache.json")
+_OCR_READER         = None
+
+try:
+    if os.path.exists(_FP_OCR_CACHE_FILE):
+        with open(_FP_OCR_CACHE_FILE, "r", encoding="utf-8") as _f:
+            _FP_OCR_CACHE = json.load(_f)
+except Exception:
+    pass
+
+def _get_ocr_reader():
+    global _OCR_READER
+    if _OCR_READER is None:
+        os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+        import easyocr
+        _OCR_READER = easyocr.Reader(["en", "es"], gpu=False, verbose=False)
+    return _OCR_READER
+
+_ROOM_NAMES = {
+    "dormitorio":"Bedroom","dormitorios":"Bedroom","habitacion":"Bedroom","habitación":"Bedroom",
+    "salon":"Living Room","salón":"Living Room","sala":"Living Room","estar":"Living Room",
+    "comedor":"Dining Room",
+    "cocina":"Kitchen",
+    "baño":"Bathroom","bano":"Bathroom","bathroom":"Bathroom",
+    "aseo":"WC","wc":"WC","toilet":"WC",
+    "terraza":"Terrace","terrace":"Terrace","balcon":"Balcony","balcón":"Balcony","balcony":"Balcony",
+    "pasillo":"Hallway","hall":"Hallway","entrada":"Entrance",
+    "trastero":"Storage","storage":"Storage",
+    "garaje":"Garage","garage":"Garage",
+    "jardin":"Garden","jardín":"Garden","garden":"Garden",
+    "estudio":"Study","despacho":"Study","office":"Office",
+    "lavadero":"Laundry","laundry":"Laundry",
+    "vestidor":"Dressing Room","armario":"Wardrobe",
+    "bedroom":"Bedroom","living":"Living Room","kitchen":"Kitchen","dining":"Dining Room",
+}
+
+_AREA_RE = re.compile(r'(\d{1,3}[,.]?\d{0,2})\s*(?:m[²2²?]|m\.?\s*2|mts\.?\s*2?)', re.IGNORECASE)
+_DIM_RE  = re.compile(r'([\d,O]{1,5}[,.][\dO]{1,3})\s*m?\s*[xX×]\s*([\d,O]{1,5}[,.][\dO]{1,3})', re.IGNORECASE)
+
+@app.get("/listing/floorplan/extract")
+def floorplan_extract_areas(url: str = Query(...)):
+    """Extract room names and areas from a floor plan image using EasyOCR."""
+    import io, requests as _req, numpy as _np
+    from PIL import Image as _PILImage, ImageEnhance as _IE
+
+    if url in _FP_OCR_CACHE:
+        return safe_json(_FP_OCR_CACHE[url])
+
+    try:
+        resp = _req.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+        from PIL import ImageFilter as _IF
+        pil = _PILImage.open(io.BytesIO(resp.content)).convert("L")
+        w, h = pil.size
+        pil = pil.resize((w * 2, h * 2), _PILImage.LANCZOS)
+        pil = _IE.Contrast(pil).enhance(2.0)
+        pil = _IE.Sharpness(pil).enhance(2.0)
+        img_array = _np.array(pil.convert("RGB"))
+    except Exception as e:
+        return safe_json({"error": f"Download failed: {e}", "rows": [], "total_area": None})
+
+    try:
+        reader = _get_ocr_reader()
+        raw = reader.readtext(img_array, detail=1, paragraph=False)
+    except Exception as e:
+        return safe_json({"error": f"OCR failed: {e}", "rows": [], "total_area": None})
+
+    def _center(bbox):
+        return (sum(p[0] for p in bbox) / 4, sum(p[1] for p in bbox) / 4)
+
+    def _norm(t):
+        return t.lower().strip().translate(str.maketrans("áéíóúàèìòùäëïöü","aeiouaeiouaeiou"))
+
+    items = [{"text": txt, "norm": _norm(txt), "cx": _center(bb)[0], "cy": _center(bb)[1], "conf": cf}
+             for bb, txt, cf in raw if cf > 0.25]
+
+    area_items = []
+    for it in items:
+        m = _AREA_RE.search(it["text"])
+        if m:
+            try:
+                v = float(m.group(1).replace(",", "."))
+                if 1 < v < 500:
+                    area_items.append({**it, "area_m2": v})
+            except ValueError:
+                pass
+
+    dim_items = []
+    for it in items:
+        m = _DIM_RE.search(it["text"])
+        if m:
+            try:
+                d1 = float(m.group(1).replace(",", ".").replace("O", "0").replace("o", "0"))
+                d2 = float(m.group(2).replace(",", ".").replace("O", "0").replace("o", "0"))
+                dim_items.append({**it, "dim": f"{d1:.2f} × {d2:.2f} m", "area_calc": round(d1 * d2, 2)})
+            except ValueError:
+                pass
+
+    room_items = []
+    for it in items:
+        for word in it["norm"].split():
+            if word in _ROOM_NAMES:
+                room_items.append({**it, "room_en": _ROOM_NAMES[word]})
+                break
+
+    def _dist(a, b):
+        return ((a["cx"] - b["cx"]) ** 2 + (a["cy"] - b["cy"]) ** 2) ** 0.5
+
+    def _is_meas_text(t):
+        return bool(_AREA_RE.search(t) or _DIM_RE.search(t))
+
+    all_measurements = []
+    for a in area_items:
+        all_measurements.append({**a, "type": "area"})
+    for d in dim_items:
+        all_measurements.append({**d, "type": "dim"})
+
+    rows = []
+    for meas in all_measurements:
+        room_label = None
+        if room_items:
+            nearest_room = min(room_items, key=lambda r: _dist(meas, r))
+            if _dist(meas, nearest_room) < 500:
+                room_label = nearest_room["room_en"]
+
+        nearby_label = None
+        if not room_label:
+            def _ok_label(it):
+                t = it["text"].strip()
+                return (it["text"] != meas["text"]
+                    and not _is_meas_text(it["text"])
+                    and 1 < len(t) <= 50
+                    and not re.match(r'^[\d\s,./\-:]+$', t)
+                    and not re.match(r'^m[²2?°]?$', t, re.I)
+                    and not re.match(r'^[A-Za-z]\d+[_\s][a-zA-Z]', t))
+            same_line = [it for it in items if _ok_label(it) and abs(it["cy"] - meas["cy"]) < 25]
+            other_line = [it for it in items if _ok_label(it) and abs(it["cy"] - meas["cy"]) >= 25 and _dist(meas, it) < 500]
+            pool = same_line if same_line else other_line
+            if pool:
+                nearby_label = min(pool, key=lambda it: _dist(meas, it))["text"]
+
+        if meas["type"] == "area":
+            rows.append({"room": room_label, "label": nearby_label, "area_m2": meas["area_m2"], "dimensions": None})
+        else:
+            rows.append({"room": room_label, "label": nearby_label, "area_m2": meas.get("area_calc"), "dimensions": meas["dim"]})
+
+    seen = set()
+    deduped = []
+    for r in rows:
+        key = (r["room"], r["dimensions"], r["area_m2"])
+        if key not in seen:
+            seen.add(key)
+            deduped.append(r)
+    rows = deduped
+
+    total = round(sum(r["area_m2"] for r in rows if r["area_m2"] and r["dimensions"] is None), 2) \
+            if any(r["area_m2"] for r in rows) else None
+    result = {"rows": rows, "total_area": total, "raw_text": [it["text"] for it in items if it["conf"] > 0.4]}
+
+    _FP_OCR_CACHE[url] = result
+    try:
+        with open(_FP_OCR_CACHE_FILE, "w", encoding="utf-8") as _f:
+            json.dump(_FP_OCR_CACHE, _f)
+    except Exception:
+        pass
+
+    return safe_json(result)
+
 # ── Search page endpoints ─────────────────────────────────────────────────
 
 @app.get("/search/options")
