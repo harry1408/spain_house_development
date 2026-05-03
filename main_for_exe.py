@@ -560,6 +560,38 @@ def municipality_overview(municipality: Optional[List[str]] = Query(None),
     r["avg_price_m2"] = r["avg_price_m2"].round(1)
     return safe_json(r.sort_values("units", ascending=False).to_dict(orient="records"))
 
+@app.get("/charts/developer-overview")
+def developer_overview(municipality: Optional[List[str]] = Query(None),
+                       province:     Optional[List[str]] = Query(None),
+                       unit_type:    Optional[List[str]] = Query(None),
+                       year:         Optional[List[str]] = Query(None),
+                       esg:          Optional[List[str]] = Query(None),
+                       period:       Optional[List[str]] = Query(None),
+                       house_type:   Optional[List[str]] = Query(None)):
+    d = _filter(municipality, unit_type, year, esg, period, province, house_type=house_type)
+    if "developer" not in d.columns:
+        return safe_json([])
+    d = d[d["developer"].notna() & (d["developer"].astype(str).str.strip() != "")]
+    unit_counts = (
+        d.groupby("developer")
+        .agg(units=("price", "count"), listings=("listing_id", "nunique"))
+        .reset_index()
+    )
+    listing_avg = (
+        d.groupby(["developer", "listing_id"])
+        .agg(avg_price=("price", "mean"), avg_price_m2=("price_per_m2", "mean"))
+        .reset_index()
+    )
+    dev_avg = (
+        listing_avg.groupby("developer")
+        .agg(avg_price=("avg_price", "mean"), avg_price_m2=("avg_price_m2", "mean"))
+        .reset_index()
+    )
+    r = unit_counts.merge(dev_avg, on="developer", how="left")
+    r["avg_price"]    = r["avg_price"].round(0)
+    r["avg_price_m2"] = r["avg_price_m2"].round(1)
+    return safe_json(r.sort_values("units", ascending=False).head(15).to_dict(orient="records"))
+
 @app.get("/debug/municipality-overview")
 def debug_municipality_overview(muni: str = "Valencia"):
     """Debug: show active vs sold breakdown for a single municipality."""
