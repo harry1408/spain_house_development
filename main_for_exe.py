@@ -4147,6 +4147,354 @@ def resolve_url(url: str):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
+# ── Post-pipeline: merge into main data sheet ─────────────────────────────────
+
+def _merge_into_main(province: str, month_name: str, month_abbr: str, year: int, dev_type: str):
+    scraped_file = os.path.join(_SCRIPT_DIR, f"{province}_all_{month_name.lower()}_units.xlsx")
+    if not os.path.exists(scraped_file):
+        _sc_log(f"  WARNING: {os.path.basename(scraped_file)} not found — skipping merge")
+        return
+
+    new_df = pd.read_excel(scraped_file)
+    new_df["Development"] = dev_type.title()
+    new_df["Month"]       = month_abbr
+    new_df["Year"]        = year
+
+    candidates = [
+        f for f in glob.glob(os.path.join(_DATA_DIR, "*.xlsx"))
+        if province.lower() in os.path.basename(f).lower()
+        and "expired" not in os.path.basename(f).lower()
+    ]
+
+    if not candidates:
+        out_path = os.path.join(_DATA_DIR, f"{province}_all.xlsx")
+        new_df.to_excel(out_path, index=False)
+        _sc_log(f"  Created new main file: {os.path.basename(out_path)}")
+        return
+
+    main_file = candidates[0]
+    _sc_log(f"  Merging {len(new_df)} rows into {os.path.basename(main_file)} …")
+    existing = pd.read_excel(main_file)
+
+    if "Month" in existing.columns and "Year" in existing.columns:
+        mask    = (existing["Month"] == month_abbr) & (existing["Year"].astype(str) == str(year))
+        dropped = int(mask.sum())
+        if dropped:
+            _sc_log(f"  Removed {dropped} existing rows for {month_abbr} {year}")
+        existing = existing[~mask]
+
+    merged = pd.concat([existing, new_df], ignore_index=True)
+    merged.to_excel(main_file, index=False)
+    _sc_log(f"  Merge done — {os.path.basename(main_file)} now {len(merged)} rows")
+
+
+def _compute_and_run_expired(province: str, month_name: str, month_abbr: str, month: int, year: int, dev_type: str, _sc):
+    prev_month_num  = month - 1 if month > 1 else 12
+    prev_year       = year if month > 1 else year - 1
+    prev_month_abbr = _cal.month_abbr[prev_month_num]
+
+    curr_file = os.path.join(_SCRIPT_DIR, f"{province}_all_{month_name.lower()}_units.xlsx")
+
+    if not os.path.exists(curr_file):
+        _sc_log(f"  Current month file missing: {os.path.basename(curr_file)}")
+        return
+
+    curr_df = pd.read_excel(curr_file)
+
+    candidates = [
+        f for f in glob.glob(os.path.join(_DATA_DIR, "*.xlsx"))
+        if province.lower() in os.path.basename(f).lower()
+        and "expired" not in os.path.basename(f).lower()
+    ]
+    if not candidates:
+        _sc_log(f"  No main data file found for {province} — skipping expired step")
+        return
+
+    main_file = candidates[0]
+    main_df   = pd.read_excel(main_file)
+
+    if "Month" not in main_df.columns or "Year" not in main_df.columns:
+        _sc_log(f"  Main file has no Month/Year columns — skipping expired step")
+        return
+
+    prev_df = main_df[
+        (main_df["Month"].astype(str).str.strip() == prev_month_abbr) &
+        (main_df["Year"].astype(str).str.strip() == str(prev_year))
+    ]
+
+    if prev_df.empty:
+        _sc_log(f"  No {prev_month_abbr} {prev_year} rows in {os.path.basename(main_file)} — skipping expired step")
+        return
+
+    _sc_log(f"  Found {len(prev_df)} prev-month rows from {os.path.basename(main_file)}")
+    curr_ids = set(curr_df["sub_listing_id"].astype(str).str.strip())
+    prev_ids = set(prev_df["sub_listing_id"].astype(str).str.strip())
+    sold_ids = prev_ids - curr_ids
+    _sc_log(f"  {len(sold_ids)} sold-out units")
+
+    if not sold_ids:
+        _sc_log("  No sold-out units — skipping expired step")
+        return
+
+    sold_rows = prev_df[prev_df["sub_listing_id"].astype(str).str.strip().isin(sold_ids)]
+    sold_out  = pd.DataFrame({"Link": sold_rows["unit_url"].values,
+                               "Unit ID": sold_rows["sub_listing_id"].values})
+    sold_out_path = os.path.join(_SCRIPT_DIR, "sold_out_properties.xlsx")
+    sold_out.to_excel(sold_out_path, index=False)
+    _sc_log(f"  Wrote {os.path.basename(sold_out_path)} ({len(sold_out)} rows)")
+
+    _sc.spain_expired_listings(dev_type, month_name)
+
+    exp_month_file = os.path.join(_SCRIPT_DIR, f"expired_listing_{month_name}.xlsx")
+    main_exp_file  = os.path.join(_DATA_DIR,   "expired_listing.xlsx")
+    if os.path.exists(exp_month_file):
+        new_exp = pd.read_excel(exp_month_file)
+        if os.path.exists(main_exp_file):
+            existing_exp = pd.read_excel(main_exp_file)
+            merged_exp   = pd.concat([existing_exp, new_exp], ignore_index=True)
+            key_col = "sub_listing" if "sub_listing" in merged_exp.columns else merged_exp.columns[0]
+            merged_exp = merged_exp.drop_duplicates(subset=[key_col])
+        else:
+            merged_exp = new_exp
+        merged_exp.to_excel(main_exp_file, index=False)
+        _sc_log(f"  Updated {os.path.basename(main_exp_file)} ({len(merged_exp)} rows)")
+
+# ── Scraper state & logger ────────────────────────────────────────────────────
+
+PIPELINE_STEPS = ["links","html","listings","subflats","combine","final_sheet","merge","expired"]
+
+_scraper_state: dict = {
+    "running":     False,
+    "step":        "",
+    "steps_done":  [],
+    "error":       None,
+    "aborted":     False,
+}
+_scraper_log_q:   queue.Queue     = queue.Queue()
+_scraper_stop_ev: threading.Event = threading.Event()
+
+def _sc_log(msg: str):
+    ts   = _dt.datetime.now().strftime("%H:%M:%S")
+    line = f"[{ts}] {msg}"
+    sys.__stdout__.write(f"[scraper] {line}\n")
+    sys.__stdout__.flush()
+    _scraper_log_q.put(line)
+
+
+class _QueueStdout:
+    """Redirects print() output from id_home_scrap into the SSE log queue."""
+    def __init__(self):
+        self._buf = ""
+
+    def write(self, text):
+        sys.__stdout__.write(text)
+        self._buf += text
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line.strip():
+                ts = _dt.datetime.now().strftime("%H:%M:%S")
+                _scraper_log_q.put(f"[{ts}] {line}")
+
+    def flush(self):
+        sys.__stdout__.flush()
+
+
+def _load_id_home_scrap():
+    import importlib.util
+    src = os.path.join(_SCRIPT_DIR, "id_home_scrap.py")
+    spec = importlib.util.spec_from_file_location("id_home_scrap", src)
+    mod  = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: str = "links"):
+    original_cwd    = os.getcwd()
+    original_stdout = sys.stdout
+    _scraper_state["running"]    = True
+    _scraper_state["error"]      = None
+    _scraper_state["aborted"]    = False
+    _scraper_state["steps_done"] = []
+    _scraper_state["step"]       = ""
+
+    from_idx     = PIPELINE_STEPS.index(from_step) if from_step in PIPELINE_STEPS else 0
+    steps_to_run = PIPELINE_STEPS[from_idx:]
+
+    _scraper_stop_ev.clear()
+    sys.stdout = _QueueStdout()
+    try:
+        os.chdir(_SCRIPT_DIR)
+
+        try:
+            _sc = _load_id_home_scrap()
+        except Exception as e:
+            _sc_log(f"ERROR loading id_home_scrap: {e}")
+            _scraper_state["error"] = str(e)
+            return
+
+        _sc.datadome = datadome_val
+
+        now        = _dt.datetime.now()
+        month      = now.month
+        month_name = _cal.month_name[month]
+        month_abbr = _cal.month_abbr[month]
+        year       = now.year
+
+        for prov in provinces:
+            if _scraper_stop_ev.is_set():
+                _sc_log("ABORTED before province: " + prov.upper())
+                break
+
+            _sc_log(f"{'='*50}")
+            _sc_log(f"Starting province: {prov.upper()} (from step: {from_step})")
+            _sc_log(f"{'='*50}")
+
+            step_map = {
+                "links":        lambda: _sc.get_individual_localtion_new_home_links(prov, month_name),
+                "html":         lambda: _sc.get_html(prov, dev_type, month_name),
+                "listings":     lambda: _sc.get_indivdual_listing(prov, dev_type, month_name.lower()),
+                "subflats":     lambda: _sc.get_indivdual_last_listing(prov, month_name.lower()),
+                "combine":      lambda: _sc.final_sheet_subflats(prov, month_name.lower()),
+                "final_sheet":  lambda: _sc.final_sheet_all_units(prov, month_name.lower()),
+                "merge":        lambda: _merge_into_main(prov, month_name, month_abbr, year, dev_type),
+                "expired":      lambda: _compute_and_run_expired(prov, month_name, month_abbr, month, year, dev_type, _sc),
+            }
+
+            for step_id in steps_to_run:
+                if _scraper_stop_ev.is_set():
+                    _sc_log(f"ABORTED at step: {prov}:{step_id}")
+                    break
+
+                _scraper_state["step"] = f"{prov}:{step_id}"
+                _sc_log(f"[{prov}] >> {step_id} …")
+                try:
+                    step_map[step_id]()
+                    _sc_log(f"[{prov}] << {step_id} OK")
+                except Exception as e:
+                    import traceback
+                    _sc_log(f"[{prov}] !! {step_id} FAILED: {e}")
+                    _sc_log(traceback.format_exc())
+                    raise
+            else:
+                _scraper_state["steps_done"].append(prov)
+                _sc_log(f"{prov.upper()} COMPLETE")
+                continue
+            break
+
+        if _scraper_stop_ev.is_set():
+            _sc_log("PIPELINE ABORTED")
+            _scraper_state["aborted"] = True
+        else:
+            _sc_log("ALL PROVINCES DONE")
+            try:
+                import json as _json_mod
+                ts = _dt.datetime.now()
+                last_run_path = os.path.join(_SCRIPT_DIR, "last_run.json")
+                with open(last_run_path, "w") as _f:
+                    _json_mod.dump({
+                        "date": ts.strftime("%-d %b %Y") if sys.platform != "win32" else ts.strftime("%#d %b %Y"),
+                        "iso":  ts.isoformat(),
+                    }, _f)
+            except Exception:
+                pass
+
+    except Exception as e:
+        import traceback
+        _sc_log(f"PIPELINE ERROR: {e}")
+        _sc_log(traceback.format_exc())
+        _scraper_state["error"] = str(e)
+    finally:
+        sys.stdout = original_stdout
+        _scraper_state["running"] = False
+        _scraper_state["step"]    = ""
+        _sc_log("__DONE__")
+        try:
+            os.chdir(original_cwd)
+        except Exception:
+            pass
+
+
+# ── Scraper API endpoints ──────────────────────────────────────────────────────
+
+@app.post("/scraper/start")
+async def scraper_start(req: Request):
+    body         = await req.json()
+    datadome_val = str(body.get("datadome", "")).strip()
+    provinces    = body.get("provinces", ["valencia"])
+    dev_type     = str(body.get("dev_type", "new")).lower()
+    from_step    = str(body.get("from_step", "links")).strip()
+
+    if not datadome_val:
+        return JSONResponse({"ok": False, "error": "datadome is required"})
+    if _scraper_state["running"]:
+        return JSONResponse({"ok": False, "error": "Pipeline already running"})
+    if not provinces:
+        return JSONResponse({"ok": False, "error": "Select at least one province"})
+
+    while not _scraper_log_q.empty():
+        try:
+            _scraper_log_q.get_nowait()
+        except queue.Empty:
+            break
+
+    t = threading.Thread(
+        target=_run_pipeline,
+        args=(provinces, datadome_val, dev_type, from_step),
+        daemon=True,
+    )
+    t.start()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/scraper/stop")
+async def scraper_stop():
+    if not _scraper_state["running"]:
+        return JSONResponse({"ok": False, "error": "No pipeline running"})
+    _scraper_stop_ev.set()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/scraper/last_run")
+def scraper_last_run():
+    path = os.path.join(_SCRIPT_DIR, "last_run.json")
+    if os.path.exists(path):
+        import json as _json_mod
+        with open(path) as f:
+            return JSONResponse(_json_mod.load(f))
+    return JSONResponse({"date": None, "iso": None})
+
+
+@app.get("/scraper/status")
+def scraper_status():
+    return safe_json({
+        "running":    _scraper_state["running"],
+        "step":       _scraper_state["step"],
+        "steps_done": _scraper_state["steps_done"],
+        "error":      _scraper_state["error"],
+        "aborted":    _scraper_state["aborted"],
+    })
+
+
+@app.get("/scraper/logs")
+def scraper_logs():
+    """SSE stream — one log line per event."""
+    def generate():
+        yield "data: connected\n\n"
+        while True:
+            try:
+                msg  = _scraper_log_q.get(timeout=25)
+                safe = msg.replace("\n", " ").replace("\r", "")
+                yield f"data: {safe}\n\n"
+            except queue.Empty:
+                yield "data: __ping__\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 if __name__ == "__main__":
     # SHAREPOINT_FILE_URL = "https://molnirre.sharepoint.com/..."
     # response = requests.get(SHAREPOINT_FILE_URL)

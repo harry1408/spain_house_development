@@ -17,6 +17,9 @@ import glob
 import os
 import ast
 
+# Set by pipeline via _sc.datadome = "..."
+datadome = ""
+
 def api_getter():
     url = "https://www.idealista.com/en/ajax/listing/georeach/valencia-valencia/pagina-3.htm"
 
@@ -882,7 +885,8 @@ def get_links():
 
 
 def get_indivdual_listing(province,type,month_name):
-
+    os.makedirs(f"{province}_chunks", exist_ok=True)
+    os.makedirs("region", exist_ok=True)
 
     # folder containing your csv files
     folder_path = "region/"  # change if needed
@@ -1461,7 +1465,7 @@ def get_individual_localtion_links():
     print("Saved alicante_municipalities.csv")
 
 def get_html(province,type,month_name):
-
+    os.makedirs("region", exist_ok=True)
 
     file = pd.read_csv(f"{province}_municipalities_{type}_{month_name}.csv")
 
@@ -1634,7 +1638,8 @@ def get_html(province,type,month_name):
         print("\nSaved all",f" for {province} ", len(df), "properties")
 
 def get_indivdual_last_listing(province,month):
-
+    print("Getting individual listing for ",province)
+    os.makedirs(f"{province}_chunks", exist_ok=True)
 
     # folder containing your csv files
     folder_path = f"{province}_chunks/"  # change if needed
@@ -2007,9 +2012,6 @@ def get_indivdual_last_listing(province,month):
             if src and src.endswith(".jpg"):
                 images.append(src)
 
-        second_level_scrape = scrape_idealista(URL,html)
-        data["images"] = second_level_scrape["images"]
-
         images_dic = []
 
         # Select actual img tags inside the container
@@ -2028,8 +2030,8 @@ def get_indivdual_last_listing(province,month):
                     "title": title
                 })
 
-        # If second level scrape exists, merge safely
         second_level_scrape = scrape_idealista(URL, html)
+        data["images"] = second_level_scrape["images"]
 
         if "images_dic" in second_level_scrape:
             images_dic.extend(second_level_scrape["images_dic"])
@@ -2040,21 +2042,15 @@ def get_indivdual_last_listing(province,month):
         # FALLBACK COORDINATES (script search)
         # =========================
 
-        script_text = soup.get_text()
+        # regex fallback on raw HTML for lat/lon (sub-flat pages lack JSON-LD geo)
+        coords = re.search(r'"latitude"\s*:\s*"?([0-9\.\-]+)"?.*?"longitude"\s*:\s*"?([0-9\.\-]+)"?', html)
+        if coords:
+            location["latitude"]  = coords.group(1)
+            location["longitude"] = coords.group(2)
 
-        coords = re.search(r'"latitude":([0-9\.\-]+),"longitude":([0-9\.\-]+)', script_text)
-        data["latitude"] = ""
-        data["longitude"] = ""
-        data["map"] = ""
-        try:
-            data["latitude"] = second_level_scrape["lat"]
-            data["longitude"] = second_level_scrape["lon"]
-            data["map"] = second_level_scrape["map_link"]
-        except:
-            pass
-        # if coords:
-        #     data["latitude"] = coords.group(1)
-        #     data["longitude"] = coords.group(2)
+        data["latitude"]  = second_level_scrape.get("lat") or location.get("latitude") or ""
+        data["longitude"] = second_level_scrape.get("lon") or location.get("longitude") or ""
+        data["map"]       = second_level_scrape.get("map_link", "")
 
         # =========================
         # SAVE JSON
@@ -2183,6 +2179,8 @@ def get_indivdual_golden_listing():
     print("✅ Combined file created: valencia_combined.csv")
 
 def get_individual_localtion_new_home_links(province,month):
+    os.makedirs(f"{province}_chunks", exist_ok=True)
+    os.makedirs("region", exist_ok=True)
 
     municipal_subs = {"valencia":"valencia-provincia","alicante":"alicante"
                       ,"castellon":"castellon","murcia":"murcia-provincia"}
@@ -2677,6 +2675,7 @@ def final_sheet_1():
     print("\n✅ FINAL SHEET CREATED")
 
 def final_sheet_all_units(province,month):
+    os.makedirs(f"{province}_chunks", exist_ok=True)
 
     import pandas as pd
     import ast
@@ -3340,6 +3339,7 @@ def final_sheet_formatted():
     print("\n✅ FINAL SHEET CREATED")
 
 def final_sheet_subflats(province,month):
+    os.makedirs(f"{province}_chunks", exist_ok=True)
 
     import pandas as pd
     import ast
@@ -3386,12 +3386,10 @@ def final_sheet_subflats(province,month):
     # =========================
     combined_df.to_excel(f"{province}_all_sub_flats_{month}_units.xlsx", index=False)
 
-import json
-import re
-import js2py
-
 
 def extract_js_variable(html, var_name):
+    print(f"Extracting JS variable '{var_name}'...")
+    print(html[:500])  # print first 500 chars for debugging
 
     start = html.find(f"var {var_name}")
     if start == -1:
@@ -3414,49 +3412,32 @@ def extract_js_variable(html, var_name):
 
     js_object = html[start:end]
 
-    js_code = f"""
-    var obj = {js_object};
-    """
-
+    # try plain JSON first (faster, no bytecode issues)
     try:
-        context = js2py.EvalJs()
-        context.execute(js_code)
-        return context.obj.to_dict()
+        return json.loads(js_object)
+    except Exception:
+        pass
+
+    # try normalising JS → JSON: quote bare keys, replace JS-only tokens
+    try:
+        fixed = re.sub(r'(?<=[{,])\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:', r'"\1":', js_object)
+        fixed = fixed.replace("'", '"').replace('undefined', 'null').replace('Infinity', '0').replace('NaN', '0')
+        return json.loads(fixed)
+    except Exception:
+        pass
+
+    # last resort: js2py (may fail with bytecode error on some environments)
+    try:
+        import js2py
+        ctx = js2py.EvalJs()
+        ctx.execute(f"var obj = {js_object};")
+        return ctx.obj.to_dict()
     except Exception as e:
         print("JS parsing failed:", e)
         return None
 
 def scrape_idealista(url,html):
-    headers = {
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "accept-language": "en-GB,en;q=0.9,en-US;q=0.8,en-IN;q=0.7",
-        "priority": "u=0, i",
-        "sec-ch-device-memory": "8",
-        "sec-ch-ua": '"Not:A-Brand";v="99", "Microsoft Edge";v="145", "Chromium";v="145"',
-        "sec-ch-ua-arch": '"x86"',
-        "sec-ch-ua-full-version-list": '"Not:A-Brand";v="99.0.0.0", "Microsoft Edge";v="145.0.3800.58", "Chromium";v="145.0.7632.76"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-model": '""',
-        "sec-ch-ua-platform": '"Windows"',
-        "sec-fetch-dest": "document",
-        "sec-fetch-mode": "navigate",
-        "sec-fetch-site": "none",
-        "sec-fetch-user": "?1",
-        "upgrade-insecure-requests": "1",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0"
-    }
-
-    # ⚠️ paste FULL cookie string exactly as in curl
-    cookies_raw = f"""userUUID=f943f60d-9600-4449-8313-247b25d74430; SESSION=0a6f08ce8f40790a~34576419-c444-47bd-8a13-b908f7faebcc; utag_main__sn=1; utag_main_ses_id=1771670467015%3Bexp-session; utag_main__prevTsUrl=https%3A%2F%2Fwww.idealista.com%2Fen%2F%3Bexp-session; utag_main__prevTsReferrer=https://www.bing.com/%3Bexp-session; utag_main__prevTsSource=Search engines%3Bexp-session; utag_main__prevTsCampaign=organicTrafficByTm%3Bexp-session; utag_main__prevTsProvider=%3Bexp-session; utag_main__prevTsNotificationId=%3Bexp-session; utag_main__prevTsProviderClickId=%3Bexp-session; utag_main__ss=0%3Bexp-session; PARAGLIDE_LOCALE=en; lang=en; datadome={datadome}"""
-
-
-    response = requests.get(
-        url,
-        headers=headers,
-        cookies={c.split("=")[0]: "=".join(c.split("=")[1:]) for c in cookies_raw.split("; ")}
-    )
-
-
+    print("Scraping level 2 for maps:", url)
     config = extract_js_variable(html, "config")#
     media = extract_js_variable(html, "adMultimediasInfo")
     detail = extract_js_variable(html, "adDetail")
@@ -3533,15 +3514,55 @@ def scrape_idealista(url,html):
 
     result["videos"] = videos
 
-    # MAP LINK
-    if "multimediaCarrousel" in result:
-        result["map_link"] = result["multimediaCarrousel"]["map"].get("src")
-        query = parse_qs(urlparse(result["map_link"]).query)
+    # PRIMARY: regex on raw HTML — works even when JS parsing fails
+    lat_m = re.search(r'"latitude"\s*:\s*"?(-?[0-9]+\.[0-9]+)"?', html)
+    lon_m = re.search(r'"longitude"\s*:\s*"?(-?[0-9]+\.[0-9]+)"?', html)
+    if lat_m and lon_m:
+        result["lat"] = lat_m.group(1)
+        result["lon"] = lon_m.group(1)
 
-        lat, lon = query["center"][0].split(",")
+    # PRIMARY: Google Maps static URL in page source
+    map_m = re.search(r'(https://maps\.googleapis\.com/maps/api/staticmap[^"\'<>\s]+)', html)
+    if map_m:
+        try:
+            map_src = map_m.group(1).replace("&amp;", "&")
+            result["map_link"] = map_src
+            if not result.get("lat"):
+                query = parse_qs(urlparse(map_src).query)
+                if "center" in query:
+                    lat, lon = query["center"][0].split(",")
+                    result["lat"] = lat
+                    result["lon"] = lon
+        except Exception:
+            pass
 
-        result["lat"] = lat
-        result["lon"] = lon
+    # fallback: multimediaCarrousel from parsed config JS
+    if not result.get("lat") and result.get("multimediaCarrousel"):
+        try:
+            map_src = result["multimediaCarrousel"]["map"].get("src", "")
+            if not result.get("map_link"):
+                result["map_link"] = map_src
+            query = parse_qs(urlparse(map_src).query)
+            lat, lon = query["center"][0].split(",")
+            result["lat"] = lat
+            result["lon"] = lon
+        except Exception:
+            pass
+
+    # fallback: adDetail parsed JS
+    if not result.get("lat") and detail:
+        try:
+            result["lat"] = str(detail.get("latitude") or "")
+            result["lon"] = str(detail.get("longitude") or "")
+        except Exception:
+            pass
+
+    # fallback images: og:image meta tags (used on individual unit pages)
+    if not result.get("images"):
+        soup_fb = BeautifulSoup(html, "lxml")
+        og_imgs = [t.get("content", "") for t in soup_fb.find_all("meta", property="og:image") if t.get("content")]
+        result["images"]     = og_imgs
+        result["images_dic"] = [{"url": u, "title": f"image_{i+1}"} for i, u in enumerate(og_imgs)]
 
     return result
 
@@ -3650,23 +3671,24 @@ def listing_search():
                 print(f"Error reading {file}: {e}")
 
 
-month = datetime.datetime.now().month
-month_name = calendar.month_name[month]
+if __name__ == "__main__":
+    month = datetime.datetime.now().month
+    month_name = calendar.month_name[month]
 
-provices=['castellon','alicante','valencia','murcia']
-province = provices[2]
-type = "new"
+    provices=['castellon','alicante','valencia','murcia']
+    province = provices[3]
+    type = "new"
 
-datadome = "xXaNF27bUmygCgYGPSHroZ5v4pR_OuOnjGlS2XaRJxzhFiJmdLPaYicfxCZ_EN55tUA4fcVMifkdS716mr2eJamU5pGlTVs9utNsPfKwchbqUgD1TE3P6unMa6APxHcA"
-###for castellon till 33
+    datadome = "VDqZ1CKJ86KTXRs6OC81b7BjGYv0DFELq1IrWHT_SACW_uTvp6SJ0wVwMDeA~HOHNiV2QE30AbPklQFB3Aa9VkJ~TdC68vcEPZ9MZY73d~hjPXD_QVW7XlJnvnFvP5p9"
+    ###for castellon till 33
 
-#get_individual_localtion_new_home_links(province,month_name)  #1st extraction of individual municipalities for provice
-#get_html(province,type,month_name)
-#get_indivdual_listing(province,type,month_name.lower())
-#get_indivdual_last_listing(province,month_name.lower()) #alicante is here
-#final_sheet_subflats(province,month_name.lower())
-#final_sheet_all_units(province,month_name.lower()) #valencia is here
-spain_expired_listings(type,month_name)
+    #get_individual_localtion_new_home_links(province,month_name)  #1st extraction of individual municipalities for provice
+    #get_html(province,type,month_name)
+    #get_indivdual_listing(province,type,month_name.lower())
+    get_indivdual_last_listing(province,month_name.lower()) #alicante is here
+    #final_sheet_subflats(province,month_name.lower())
+    #final_sheet_all_units(province,month_name.lower()) #valencia is here
+    #spain_expired_listings(type,month_name)
 
 
 
