@@ -3301,7 +3301,7 @@ def description_search_endpoint(
 #  EXCEL EXPORT  — selected listings in wide per-unit-type format
 # ══════════════════════════════════════════════════════════════════════════
 @app.get("/search/export")
-def export_listings_excel(ids: str = Query(...)):
+def export_listings_excel(ids: str = Query(...), include_summary: bool = Query(False)):
     try:
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment
@@ -3428,6 +3428,89 @@ def export_listings_excel(ids: str = Query(...)):
     import datetime as _dt
     export_date = _dt.datetime.now().strftime("%d %B %Y")
 
+    # ── Pre-compute summary (needed before writing rows) ──────────────────
+    combined_summary = []
+    if include_summary and listings_data:
+        from collections import defaultdict
+        combo_groups: dict = defaultdict(list)
+        for ld in listings_data:
+            for apt in ld["apartments"]:
+                ht = apt.get("house_type") or ""
+                ut = apt.get("unit_type")  or ""
+                if ht or ut:
+                    key = f"{ht} + {ut}" if (ht and ut) else (ht or ut)
+                    combo_groups[key].append({
+                        "price": apt["price"], "pm2": apt["pm2"], "size": apt["size"],
+                        "_ht": ht, "_ut": ut,
+                    })
+
+        def _grp_stats(rows):
+            prices = [r["price"] for r in rows if r["price"]]
+            pm2s   = [r["pm2"]   for r in rows if r["pm2"]]
+            sizes  = [r["size"]  for r in rows if r["size"]]
+            return {
+                "count":     len(rows),
+                "avg_size":  round(sum(sizes)/len(sizes), 1) if sizes else None,
+                "min_price": min(prices) if prices else None,
+                "avg_price": round(sum(prices)/len(prices))  if prices else None,
+                "max_price": max(prices) if prices else None,
+                "avg_pm2":   round(sum(pm2s)/len(pm2s))      if pm2s  else None,
+            }
+
+        _UT_ORD = {"Studio":0,"1BR":1,"2BR":2,"3BR":3,"4BR":4,"5BR":5,"Penthouse":6}
+        combined_summary = sorted(
+            [(k, _grp_stats(v)) for k, v in combo_groups.items()],
+            key=lambda x: (
+                combo_groups[x[0]][0]["_ht"],
+                _UT_ORD.get(combo_groups[x[0]][0]["_ut"], 99),
+            )
+        )
+
+    SUMM_HDRS = ["Type", "Units", "Avg m²", "Min Price (€)", "Avg Price (€)", "Max Price (€)", "Avg €/m²"]
+
+    def _write_summ_section(ws_, title, rows_data, r):
+        # Banner spanning all columns
+        ws_.merge_cells(f"A{r}:{col(NCOLS)}{r}")
+        c = ws_[f"A{r}"]
+        c.value = title
+        c.font = Font(name=FONT_NAME, bold=True, color="FFFFFF", size=10)
+        c.fill = fill(NAVY); c.alignment = aln()
+        ws_.row_dimensions[r].height = 20
+        r += 1
+        # Column headers (cols A-G only)
+        for ci, h in enumerate(SUMM_HDRS):
+            c = ws_[f"{col(ci+1)}{r}"]
+            c.value = h
+            c.font = font(bold=True, color="FFFFFF", size=9)
+            c.fill = fill(DGREY); c.alignment = aln("center"); c.border = border()
+        # Shade remaining cols in the header row
+        for ci in range(len(SUMM_HDRS), NCOLS):
+            ws_[f"{col(ci+1)}{r}"].fill = fill(DGREY)
+        ws_.row_dimensions[r].height = 16
+        r += 1
+        # Data rows
+        for i, (name, s) in enumerate(rows_data):
+            bg_ = fill(LGREY) if i % 2 == 0 else fill("FFFFFF")
+            vals = [name, s["count"], s["avg_size"], s["min_price"],
+                    s["avg_price"], s["max_price"], s["avg_pm2"]]
+            for ci, v in enumerate(vals):
+                c = ws_[f"{col(ci+1)}{r}"]
+                c.fill = bg_; c.border = border()
+                c.font = font(bold=(ci == 0), color=NAVY if ci == 4 else "000000", size=10)
+                c.alignment = aln("left" if ci == 0 else "right")
+                if ci == 2 and v is not None:
+                    c.value = v; c.number_format = "#,##0.0"
+                elif ci in (3, 4, 5, 6) and v is not None:
+                    c.value = v; c.number_format = "#,##0"
+                else:
+                    c.value = v
+            # Shade remaining cols
+            for ci in range(len(SUMM_HDRS), NCOLS):
+                ws_[f"{col(ci+1)}{r}"].fill = bg_
+            ws_.row_dimensions[r].height = 14
+            r += 1
+        return r  # caller adds gap if needed
+
     # ── Row 1: Title ──────────────────────────────────────────────────────
     ws.merge_cells(f"A1:{col(NCOLS)}1")
     c = ws["A1"]
@@ -3444,28 +3527,35 @@ def export_listings_excel(ids: str = Query(...)):
     c.alignment = aln()
     ws.row_dimensions[2].height = 18
 
-    # ── Row 3: Column headers ─────────────────────────────────────────────
-    ws.row_dimensions[3].height = 30
+    # ── Summary table (rows 3+, only when include_summary) ───────────────
+    cur_row = 3
+    if combined_summary:
+        cur_row = _write_summ_section(ws, "Summary", combined_summary, cur_row)
+        cur_row += 1  # blank gap before main headers
+
+    # ── Column headers ─────────────────────────────────────────────────────
+    hdr_row = cur_row
+    ws.row_dimensions[hdr_row].height = 30
     listing_prefix = ["Property Name","Developer","City Area","Municipality","Province"]
     all_headers = listing_prefix + APT_HEADERS + TAIL_HEADERS + ["Link","Description"]
     for i, h in enumerate(all_headers):
-        c = ws[f"{col(i+1)}3"]
+        c = ws[f"{col(i+1)}{hdr_row}"]
         c.value = h
         c.font = font(bold=True, color="FFFFFF", size=9)
         if i < NL:
             c.fill = fill(NAVY)
         elif i < NL + NAPT:
             c.fill = fill(DGREY)
-        elif i < NL + NAPT + NTAIL + 1:   # tail + link
+        elif i < NL + NAPT + NTAIL + 1:
             c.fill = fill("1A3060")
-        else:                               # description
+        else:
             c.fill = fill("2A3F6F")
         c.alignment = aln("center", wrap=True)
         c.border = border()
-    ws.freeze_panes = "A4"
+    ws.freeze_panes = f"A{hdr_row + 1}"
 
     # ── Data rows ─────────────────────────────────────────────────────────
-    row = 4
+    row = hdr_row + 1
     for li, ld in enumerate(listings_data):
         apts  = ld["apartments"]
         n_apt = len(apts)
