@@ -4,3 +4,6 @@ pandas==2.2.2
 openpyxl==3.1.5
 easyocr
 anthropic
+cryptography
+browser-cookie3
+playwright

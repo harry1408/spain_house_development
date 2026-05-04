@@ -2215,14 +2215,29 @@ def get_individual_localtion_new_home_links(province,month):
         cookies={c.split("=")[0]: "=".join(c.split("=")[1:]) for c in cookies_raw.split("; ")}
     )
 
-
-
     soup = BeautifulSoup(response.text, "lxml")
+
+    _pt = response.text[:3000].lower()
+    if (response.status_code in (403, 429)
+            or ("datadome" in _pt and "blocked" in _pt)
+            or "are you a robot" in _pt
+            or ("enable javascript" in _pt and "#location_list" not in response.text)):
+        raise RuntimeError(
+            f"DataDome blocked the request (HTTP {response.status_code}). "
+            "The datadome cookie is invalid or expired — click 'Auto-detect from Browser' "
+            "to refresh it, then restart the pipeline."
+        )
 
     data = []
 
     # locate main list
     location_list = soup.select_one("#location_list")
+
+    if location_list is None:
+        raise RuntimeError(
+            f"Could not find #location_list on page (HTTP {response.status_code}). "
+            "DataDome may be blocking — refresh the datadome cookie and retry."
+        )
 
     for letter_block in location_list.find_all("li", recursive=False):
 

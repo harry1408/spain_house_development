@@ -4570,6 +4570,47 @@ def scraper_last_run():
     return JSONResponse({"date": None, "iso": None})
 
 
+_DD_JSPL = "VG6qBOW_Kdophq4ubqevsPZppcm8hXT29G5I8J-TQKZul-P5oyxK9vcb7PGcDocXG"
+_DD_CID  = "_3ugUV53KpUtZhmwx8zsJ9w0Tq~ylKWNhPvEauaQQw8g7oUC1F5677YmbEK8YiuQGWA7koCeS4_qlV8aKw6SUTE0aXNY~rzOy2z9Ed7w9Hg3PKmHx~UJUEtjAAOzFBsK"
+_DD_DDK  = "AC81AADC3279CA4C7B968B717FBB30"
+
+
+@app.get("/scraper/datadome")
+def scraper_datadome():
+    import requests as _req, traceback
+    try:
+        session = _req.Session()
+        response = session.post(
+            "https://dd.idealista.com/js/",
+            headers={
+                "accept": "*/*",
+                "accept-language": "en-GB,en;q=0.9,en-US;q=0.8,en-IN;q=0.7",
+                "content-type": "application/x-www-form-urlencoded",
+                "origin": "https://www.idealista.com",
+                "referer": "https://www.idealista.com/",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/147.0.0.0 Safari/537.36",
+            },
+            data={
+                "jspl": _DD_JSPL,
+                "eventCounters": "[]",
+                "jsType": "ch",
+                "cid": _DD_CID,
+                "ddk": _DD_DDK,
+                "Referer": "https://www.idealista.com/",
+                "request": "/",
+                "responsePage": "origin",
+                "ddv": "5.6.2",
+            },
+            timeout=20,
+        )
+        datadome_cookie = response.json().get("cookie", "").replace("datadome=", "")
+        if datadome_cookie:
+            return JSONResponse({"ok": True, "datadome": datadome_cookie})
+        return JSONResponse({"ok": False, "error": f"No cookie in response (status {response.status_code}): {response.text[:200]}"})
+    except Exception:
+        return JSONResponse({"ok": False, "error": traceback.format_exc(limit=4)})
+
+
 @app.get("/scraper/status")
 def scraper_status():
     return safe_json({
