@@ -4341,6 +4341,39 @@ def _load_id_home_scrap():
     return mod
 
 
+def _regenerate_datadome() -> str:
+    """Call dd.idealista.com/js/ to get a fresh DataDome cookie."""
+    import requests as _req
+    try:
+        session = _req.Session()
+        response = session.post(
+            "https://dd.idealista.com/js/",
+            headers={
+                "accept": "*/*",
+                "accept-language": "en-GB,en;q=0.9,en-US;q=0.8,en-IN;q=0.7",
+                "content-type": "application/x-www-form-urlencoded",
+                "origin": "https://www.idealista.com",
+                "referer": "https://www.idealista.com/",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/147.0.0.0 Safari/537.36",
+            },
+            data={
+                "jspl": _DD_JSPL,
+                "eventCounters": "[]",
+                "jsType": "ch",
+                "cid": _DD_CID,
+                "ddk": _DD_DDK,
+                "Referer": "https://www.idealista.com/",
+                "request": "/",
+                "responsePage": "origin",
+                "ddv": "5.6.2",
+            },
+            timeout=20,
+        )
+        return response.json().get("cookie", "").replace("datadome=", "")
+    except Exception:
+        return ""
+
+
 def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: str = "links"):
     original_cwd    = os.getcwd()
     original_stdout = sys.stdout
@@ -4404,7 +4437,22 @@ def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: 
                     step_map[step_id]()
                     _sc_log(f"[{prov}] << {step_id} OK")
                 except Exception as e:
-                    import traceback
+                    import traceback, requests as _req
+                    _is_dd = ("datadome" in str(e).lower() or "blocked" in str(e).lower()
+                              or "are you a robot" in str(e).lower())
+                    _is_timeout = isinstance(e, (_req.exceptions.Timeout,
+                                                  _req.exceptions.ConnectionError))
+                    if _is_dd or _is_timeout:
+                        _sc_log(f"[{prov}] !! DataDome/timeout on {step_id} — regenerating cookie …")
+                        new_dd = _regenerate_datadome()
+                        if new_dd:
+                            _sc.datadome = new_dd
+                            _sc_log(f"[{prov}] !! Retrying {step_id} with fresh datadome …")
+                            step_map[step_id]()
+                            _sc_log(f"[{prov}] << {step_id} OK (after cookie refresh)")
+                            continue
+                        else:
+                            _sc_log(f"[{prov}] !! Could not regenerate DataDome cookie — aborting")
                     _sc_log(f"[{prov}] !! {step_id} FAILED: {e}")
                     _sc_log(traceback.format_exc())
                     raise
