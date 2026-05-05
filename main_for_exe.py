@@ -4427,9 +4427,58 @@ def _load_id_home_scrap():
 
 
 def _regenerate_datadome() -> str:
-    """Call dd.idealista.com/js/ to get a fresh DataDome cookie."""
-    import requests as _req
+    """Open a headless browser, capture live jspl/cid, then POST to get a fresh DataDome cookie."""
+    import urllib.parse, time, requests as _req
+    tokens = {"jspl": None, "cid": None}
+
+    def _on_request(req):
+        try:
+            if "dd.idealista.com" in req.url and "/js/" in req.url and req.method == "POST":
+                post_data = req.post_data or ""
+                if "jspl" in post_data:
+                    params = urllib.parse.parse_qs(post_data)
+                    jspl = params.get("jspl", [""])[0]
+                    cid  = params.get("cid",  [""])[0]
+                    if jspl and cid:
+                        tokens["jspl"] = jspl
+                        tokens["cid"]  = cid
+        except Exception:
+            pass
+
     try:
+        import asyncio as _asyncio
+        try:
+            _asyncio.set_event_loop_policy(_asyncio.WindowsProactorEventLoopPolicy())
+        except AttributeError:
+            pass
+        _asyncio.set_event_loop(_asyncio.new_event_loop())
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled", "--no-sandbox",
+                      "--disable-dev-shm-usage"],
+            )
+            ctx = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                           "Chrome/120.0.0.0 Safari/537.36",
+            )
+            page = ctx.new_page()
+            page.on("request", _on_request)
+            try:
+                page.goto("https://www.idealista.com/", timeout=60000,
+                          wait_until="domcontentloaded")
+            except Exception:
+                pass
+            for _ in range(15):
+                if tokens["jspl"] and tokens["cid"]:
+                    break
+                time.sleep(1)
+            browser.close()
+
+        if not tokens["jspl"] or not tokens["cid"]:
+            return ""
+
         session = _req.Session()
         response = session.post(
             "https://dd.idealista.com/js/",
@@ -4439,13 +4488,14 @@ def _regenerate_datadome() -> str:
                 "content-type": "application/x-www-form-urlencoded",
                 "origin": "https://www.idealista.com",
                 "referer": "https://www.idealista.com/",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/147.0.0.0 Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "Chrome/120.0.0.0 Safari/537.36",
             },
             data={
-                "jspl": _DD_JSPL,
+                "jspl": tokens["jspl"],
                 "eventCounters": "[]",
                 "jsType": "ch",
-                "cid": _DD_CID,
+                "cid": tokens["cid"],
                 "ddk": _DD_DDK,
                 "Referer": "https://www.idealista.com/",
                 "request": "/",
@@ -4630,15 +4680,85 @@ def scraper_last_run():
     return JSONResponse({"date": None, "iso": None})
 
 
-_DD_JSPL = "VG6qBOW_Kdophq4ubqevsPZppcm8hXT29G5I8J-TQKZul-P5oyxK9vcb7PGcDocXG"
-_DD_CID  = "_3ugUV53KpUtZhmwx8zsJ9w0Tq~ylKWNhPvEauaQQw8g7oUC1F5677YmbEK8YiuQGWA7koCeS4_qlV8aKw6SUTE0aXNY~rzOy2z9Ed7w9Hg3PKmHx~UJUEtjAAOzFBsK"
-_DD_DDK  = "AC81AADC3279CA4C7B968B717FBB30"
+_DD_DDK = "AC81AADC3279CA4C7B968B717FBB30"
 
 
 @app.get("/scraper/datadome")
 def scraper_datadome():
-    import requests as _req, traceback
+    import urllib.parse, time, traceback, threading, requests as _req
+    tokens = {"jspl": None, "cid": None, "err": None}
+
+    def _on_request(req):
+        try:
+            if "dd.idealista.com" in req.url and "/js/" in req.url and req.method == "POST":
+                post_data = req.post_data or ""
+                if "jspl" in post_data:
+                    params = urllib.parse.parse_qs(post_data)
+                    jspl = params.get("jspl", [""])[0]
+                    cid  = params.get("cid",  [""])[0]
+                    if jspl and cid:
+                        tokens["jspl"] = jspl
+                        tokens["cid"]  = cid
+        except Exception:
+            pass
+
+    def _run_browser():
+        try:
+            import asyncio
+            try:
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            except AttributeError:
+                pass
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(
+                    headless=False,
+                    args=["--disable-blink-features=AutomationControlled",
+                          "--no-sandbox", "--disable-dev-shm-usage",
+                          "--start-maximized"],
+                )
+                ctx = browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                               "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+                    no_viewport=True,
+                )
+                page = ctx.new_page()
+                page.on("request", _on_request)
+                try:
+                    page.goto("https://www.idealista.com/", timeout=60000,
+                              wait_until="domcontentloaded")
+                except Exception:
+                    pass
+                for _ in range(60):
+                    if tokens["jspl"] and tokens["cid"]:
+                        break
+                    try:
+                        page.mouse.move(200, 300)
+                        page.mouse.wheel(0, 300)
+                    except Exception:
+                        pass
+                    time.sleep(1)
+                browser.close()
+        except ImportError:
+            tokens["err"] = "playwright not installed. Run: pip install playwright && playwright install chromium"
+        except Exception as e:
+            import traceback as _tb
+            tokens["err"] = _tb.format_exc()
+
     try:
+        t = threading.Thread(target=_run_browser, daemon=True)
+        t.start()
+        t.join(timeout=70)
+
+        if tokens["err"]:
+            return JSONResponse({"ok": False, "error": tokens["err"]})
+
+        if not tokens["jspl"] or not tokens["cid"]:
+            return JSONResponse({"ok": False,
+                                 "error": "Could not capture jspl/cid — "
+                                          "DataDome challenge request not detected in time."})
+
         session = _req.Session()
         response = session.post(
             "https://dd.idealista.com/js/",
@@ -4648,13 +4768,14 @@ def scraper_datadome():
                 "content-type": "application/x-www-form-urlencoded",
                 "origin": "https://www.idealista.com",
                 "referer": "https://www.idealista.com/",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/147.0.0.0 Safari/537.36",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                              "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
             },
             data={
-                "jspl": _DD_JSPL,
+                "jspl": tokens["jspl"],
                 "eventCounters": "[]",
                 "jsType": "ch",
-                "cid": _DD_CID,
+                "cid": tokens["cid"],
                 "ddk": _DD_DDK,
                 "Referer": "https://www.idealista.com/",
                 "request": "/",
@@ -4666,7 +4787,9 @@ def scraper_datadome():
         datadome_cookie = response.json().get("cookie", "").replace("datadome=", "")
         if datadome_cookie:
             return JSONResponse({"ok": True, "datadome": datadome_cookie})
-        return JSONResponse({"ok": False, "error": f"No cookie in response (status {response.status_code}): {response.text[:200]}"})
+        return JSONResponse({"ok": False,
+                             "error": f"No cookie in response (HTTP {response.status_code}): "
+                                      f"{response.text[:300]}"})
     except Exception:
         return JSONResponse({"ok": False, "error": traceback.format_exc(limit=4)})
 
