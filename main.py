@@ -4504,21 +4504,33 @@ def _load_id_home_scrap():
 
 
 def _regenerate_datadome() -> str:
-    """Open a headless browser, capture live jspl/cid, then POST to get a fresh DataDome cookie."""
-    import urllib.parse, time, requests as _req
-    tokens = {"jspl": None, "cid": None}
+    """Headless browser: solve DataDome slider challenge and return the cookie value."""
+    import time, random
+    result = {"cookie": None}
 
-    def _on_request(req):
+    def _drag_slider(page, frame):
         try:
-            if "dd.idealista.com" in req.url and "/js/" in req.url and req.method == "POST":
-                post_data = req.post_data or ""
-                if "jspl" in post_data:
-                    params = urllib.parse.parse_qs(post_data)
-                    jspl = params.get("jspl", [""])[0]
-                    cid  = params.get("cid",  [""])[0]
-                    if jspl and cid:
-                        tokens["jspl"] = jspl
-                        tokens["cid"]  = cid
+            slider = frame.locator(".slider").first
+            target = frame.locator(".sliderTarget").first
+            slider.wait_for(state="visible", timeout=10000)
+            target.wait_for(state="visible", timeout=10000)
+            sb = slider.bounding_box()
+            tb = target.bounding_box()
+            sx = sb["x"] + sb["width"] / 2;  sy = sb["y"] + sb["height"] / 2
+            ex = tb["x"] + tb["width"] / 2;  ey = tb["y"] + tb["height"] / 2
+            page.mouse.move(sx, sy, steps=20)
+            time.sleep(random.uniform(0.2, 0.5))
+            page.mouse.down()
+            n = random.randint(40, 60)
+            for i in range(n):
+                t = (i + 1) / n
+                page.mouse.move(sx + (ex - sx) * t + random.uniform(-1.5, 1.5),
+                                sy + (ey - sy) * t + random.uniform(-1.5, 1.5))
+                time.sleep(random.uniform(0.005, 0.02))
+            page.mouse.move(ex + 5, ey, steps=5)
+            page.mouse.move(ex, ey, steps=3)
+            time.sleep(random.uniform(0.1, 0.3))
+            page.mouse.up()
         except Exception:
             pass
 
@@ -4533,57 +4545,39 @@ def _regenerate_datadome() -> str:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(
                 headless=True,
-                args=["--disable-blink-features=AutomationControlled", "--no-sandbox",
-                      "--disable-dev-shm-usage"],
+                args=["--disable-blink-features=AutomationControlled",
+                      "--no-sandbox", "--disable-dev-shm-usage"],
             )
             ctx = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                           "Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1400, "height": 900},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 Chrome/120 Safari/537.36",
             )
             page = ctx.new_page()
-            page.on("request", _on_request)
             try:
-                page.goto("https://www.idealista.com/", timeout=60000,
-                          wait_until="domcontentloaded")
+                page.goto("https://www.idealista.com/", wait_until="domcontentloaded",
+                          timeout=60000)
             except Exception:
                 pass
-            for _ in range(15):
-                if tokens["jspl"] and tokens["cid"]:
-                    break
-                time.sleep(1)
+            page.wait_for_timeout(5000)
+            page.mouse.move(200, 300, steps=20)
+            page.mouse.wheel(0, 500)
+            time.sleep(random.uniform(1, 2))
+            for frame in page.frames:
+                try:
+                    if "slider" in frame.content().lower():
+                        _drag_slider(page, frame); break
+                except Exception:
+                    pass
+            page.wait_for_timeout(8000)
+            for cookie in ctx.cookies():
+                if cookie["name"].lower() == "datadome":
+                    result["cookie"] = cookie["value"]; break
             browser.close()
-
-        if not tokens["jspl"] or not tokens["cid"]:
-            return ""
-
-        session = _req.Session()
-        response = session.post(
-            "https://dd.idealista.com/js/",
-            headers={
-                "accept": "*/*",
-                "accept-language": "en-GB,en;q=0.9,en-US;q=0.8,en-IN;q=0.7",
-                "content-type": "application/x-www-form-urlencoded",
-                "origin": "https://www.idealista.com",
-                "referer": "https://www.idealista.com/",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                              "Chrome/120.0.0.0 Safari/537.36",
-            },
-            data={
-                "jspl": tokens["jspl"],
-                "eventCounters": "[]",
-                "jsType": "ch",
-                "cid": tokens["cid"],
-                "ddk": _DD_DDK,
-                "Referer": "https://www.idealista.com/",
-                "request": "/",
-                "responsePage": "origin",
-                "ddv": "5.6.2",
-            },
-            timeout=20,
-        )
-        return response.json().get("cookie", "").replace("datadome=", "")
     except Exception:
         return ""
+
+    return result["cookie"] or ""
 
 
 def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: str = "links"):
@@ -4648,6 +4642,13 @@ def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: 
                 try:
                     step_map[step_id]()
                     _sc_log(f"[{prov}] << {step_id} OK")
+                    _sc_log(f"[{prov}] Refreshing DataDome cookie after {step_id}…")
+                    _fresh = _regenerate_datadome()
+                    if _fresh:
+                        _sc.datadome = _fresh
+                        _sc_log(f"[{prov}] DataDome refreshed")
+                    else:
+                        _sc_log(f"[{prov}] WARN: DataDome refresh failed — continuing with existing")
                 except Exception as e:
                     import traceback, requests as _req
                     _is_dd = ("datadome" in str(e).lower() or "blocked" in str(e).lower()
@@ -4763,20 +4764,32 @@ _DD_DDK = "AC81AADC3279CA4C7B968B717FBB30"
 
 @app.get("/scraper/datadome")
 def scraper_datadome():
-    import urllib.parse, time, traceback, threading, requests as _req
-    tokens = {"jspl": None, "cid": None, "err": None}
+    import time, random, traceback, threading
+    result = {"cookie": None, "err": None}
 
-    def _on_request(req):
+    def _drag_slider(page, frame):
         try:
-            if "dd.idealista.com" in req.url and "/js/" in req.url and req.method == "POST":
-                post_data = req.post_data or ""
-                if "jspl" in post_data:
-                    params = urllib.parse.parse_qs(post_data)
-                    jspl = params.get("jspl", [""])[0]
-                    cid  = params.get("cid",  [""])[0]
-                    if jspl and cid:
-                        tokens["jspl"] = jspl
-                        tokens["cid"]  = cid
+            slider = frame.locator(".slider").first
+            target = frame.locator(".sliderTarget").first
+            slider.wait_for(state="visible", timeout=20000)
+            target.wait_for(state="visible", timeout=20000)
+            sb = slider.bounding_box()
+            tb = target.bounding_box()
+            sx = sb["x"] + sb["width"] / 2;  sy = sb["y"] + sb["height"] / 2
+            ex = tb["x"] + tb["width"] / 2;  ey = tb["y"] + tb["height"] / 2
+            page.mouse.move(sx, sy, steps=20)
+            time.sleep(random.uniform(0.2, 0.5))
+            page.mouse.down()
+            n = random.randint(40, 60)
+            for i in range(n):
+                t = (i + 1) / n
+                page.mouse.move(sx + (ex - sx) * t + random.uniform(-1.5, 1.5),
+                                sy + (ey - sy) * t + random.uniform(-1.5, 1.5))
+                time.sleep(random.uniform(0.005, 0.02))
+            page.mouse.move(ex + 5, ey, steps=5)
+            page.mouse.move(ex, ey, steps=3)
+            time.sleep(random.uniform(0.1, 0.3))
+            page.mouse.up()
         except Exception:
             pass
 
@@ -4793,82 +4806,47 @@ def scraper_datadome():
                 browser = pw.chromium.launch(
                     headless=False,
                     args=["--disable-blink-features=AutomationControlled",
-                          "--no-sandbox", "--disable-dev-shm-usage",
                           "--start-maximized"],
                 )
                 ctx = browser.new_context(
+                    viewport={"width": 1400, "height": 900},
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                               "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-                    no_viewport=True,
+                               "AppleWebKit/537.36 Chrome/120 Safari/537.36",
                 )
                 page = ctx.new_page()
-                page.on("request", _on_request)
-                try:
-                    page.goto("https://www.idealista.com/", timeout=60000,
-                              wait_until="domcontentloaded")
-                except Exception:
-                    pass
-                # Wait up to 60 s — DataDome may show a captcha that takes time
-                for _ in range(60):
-                    if tokens["jspl"] and tokens["cid"]:
-                        break
+                page.goto("https://www.idealista.com/", wait_until="domcontentloaded",
+                          timeout=120000)
+                page.wait_for_timeout(10000)
+                page.mouse.move(200, 300, steps=20)
+                page.mouse.wheel(0, 500)
+                time.sleep(random.uniform(1, 2))
+                for frame in page.frames:
                     try:
-                        page.mouse.move(200, 300)
-                        page.mouse.wheel(0, 300)
+                        if "slider" in frame.content().lower():
+                            _drag_slider(page, frame); break
                     except Exception:
                         pass
-                    time.sleep(1)
+                page.wait_for_timeout(8000)
+                for cookie in ctx.cookies():
+                    if cookie["name"].lower() == "datadome":
+                        result["cookie"] = cookie["value"]; break
                 browser.close()
         except ImportError:
-            tokens["err"] = "playwright not installed. Run: pip install playwright && playwright install chromium"
-        except Exception as e:
+            result["err"] = "playwright not installed. Run: pip install playwright && playwright install chromium"
+        except Exception:
             import traceback as _tb
-            tokens["err"] = _tb.format_exc()
+            result["err"] = _tb.format_exc()
 
     try:
         t = threading.Thread(target=_run_browser, daemon=True)
         t.start()
-        t.join(timeout=70)
-
-        if tokens["err"]:
-            return JSONResponse({"ok": False, "error": tokens["err"]})
-
-        if not tokens["jspl"] or not tokens["cid"]:
+        t.join(timeout=90)
+        if result["err"]:
+            return JSONResponse({"ok": False, "error": result["err"]})
+        if not result["cookie"]:
             return JSONResponse({"ok": False,
-                                 "error": "Could not capture jspl/cid — "
-                                          "DataDome challenge request not detected in time."})
-
-        session = _req.Session()
-        response = session.post(
-            "https://dd.idealista.com/js/",
-            headers={
-                "accept": "*/*",
-                "accept-language": "en-GB,en;q=0.9,en-US;q=0.8,en-IN;q=0.7",
-                "content-type": "application/x-www-form-urlencoded",
-                "origin": "https://www.idealista.com",
-                "referer": "https://www.idealista.com/",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                              "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-            },
-            data={
-                "jspl": tokens["jspl"],
-                "eventCounters": "[]",
-                "jsType": "ch",
-                "cid": tokens["cid"],
-                "ddk": _DD_DDK,
-                "Referer": "https://www.idealista.com/",
-                "request": "/",
-                "responsePage": "origin",
-                "ddv": "5.6.2",
-            },
-            timeout=20,
-        )
-        datadome_cookie = response.json().get("cookie", "").replace("datadome=", "")
-        if datadome_cookie:
-            return JSONResponse({"ok": True, "datadome": datadome_cookie})
-        return JSONResponse({"ok": False,
-                             "error": f"No cookie in response (HTTP {response.status_code}): "
-                                      f"{response.text[:300]}"})
+                                 "error": "DataDome cookie not found in browser context."})
+        return JSONResponse({"ok": True, "datadome": result["cookie"]})
     except Exception:
         return JSONResponse({"ok": False, "error": traceback.format_exc(limit=4)})
 
