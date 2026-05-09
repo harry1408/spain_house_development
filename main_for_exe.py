@@ -4394,6 +4394,30 @@ _scraper_state: dict = {
 _scraper_log_q:   queue.Queue     = queue.Queue()
 _scraper_stop_ev: threading.Event = threading.Event()
 
+_PROGRESS_FILE = os.path.join(_SCRIPT_DIR, "last_progress.json")
+if not os.path.exists(_PROGRESS_FILE):
+    try:
+        with open(_PROGRESS_FILE, "w") as _f:
+            json.dump({}, _f)
+    except Exception:
+        pass
+
+def _save_progress(data: dict):
+    try:
+        with open(_PROGRESS_FILE, "w") as _f:
+            json.dump(data, _f, indent=2)
+    except Exception:
+        pass
+
+def _load_progress() -> dict:
+    try:
+        if os.path.exists(_PROGRESS_FILE):
+            with open(_PROGRESS_FILE) as _f:
+                return json.load(_f)
+    except Exception:
+        pass
+    return {}
+
 def _sc_log(msg: str):
     ts   = _dt.datetime.now().strftime("%H:%M:%S")
     line = f"[{ts}] {msg}"
@@ -4619,6 +4643,14 @@ def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: 
                     "start": _dt.datetime.now().strftime("%H:%M:%S"),
                     "start_ts": time.time(),
                 }
+                _save_progress({
+                    "provinces":   provinces,
+                    "dev_type":    dev_type,
+                    "steps_done":  list(_scraper_state["steps_done"]),
+                    "resume_prov": prov,
+                    "resume_step": step_id,
+                    "saved_at":    _dt.datetime.now().isoformat(),
+                })
                 _sc_log(f"[{prov}] >> {step_id} …")
                 try:
                     step_map[step_id]()
@@ -4698,14 +4730,18 @@ def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: 
         else:
             _sc_log("ALL PROVINCES DONE")
             try:
-                import json as _json_mod
                 ts = _dt.datetime.now()
                 last_run_path = os.path.join(_SCRIPT_DIR, "last_run.json")
                 with open(last_run_path, "w") as _f:
-                    _json_mod.dump({
+                    json.dump({
                         "date": ts.strftime("%-d %b %Y") if sys.platform != "win32" else ts.strftime("%#d %b %Y"),
                         "iso":  ts.isoformat(),
                     }, _f)
+            except Exception:
+                pass
+            try:
+                with open(_PROGRESS_FILE, "w") as _f:
+                    json.dump({}, _f)
             except Exception:
                 pass
 
@@ -4771,10 +4807,25 @@ async def scraper_stop():
 def scraper_last_run():
     path = os.path.join(_SCRIPT_DIR, "last_run.json")
     if os.path.exists(path):
-        import json as _json_mod
         with open(path) as f:
-            return JSONResponse(_json_mod.load(f))
+            return JSONResponse(json.load(f))
     return JSONResponse({"date": None, "iso": None})
+
+
+@app.get("/scraper/last_progress")
+def scraper_last_progress():
+    data = _load_progress()
+    return JSONResponse(data if data else {})
+
+
+@app.delete("/scraper/last_progress")
+def scraper_clear_progress():
+    try:
+        with open(_PROGRESS_FILE, "w") as _f:
+            json.dump({}, _f)
+    except Exception:
+        pass
+    return JSONResponse({"ok": True})
 
 
 _DD_DDK = "AC81AADC3279CA4C7B968B717FBB30"
