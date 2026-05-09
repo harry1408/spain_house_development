@@ -4580,6 +4580,35 @@ def _regenerate_datadome() -> str:
     return result["cookie"] or ""
 
 
+_dd_refresh_lock = threading.Lock()
+
+def _datadome_refresh_loop(sc_holder, stop_ev):
+    """Background thread: refresh DataDome cookie every 20–30 min while pipeline runs."""
+    import random as _rnd
+    while not stop_ev.is_set():
+        interval = _rnd.uniform(20 * 60, 30 * 60)
+        deadline = time.time() + interval
+        while time.time() < deadline:
+            if stop_ev.is_set():
+                return
+            time.sleep(5)
+        if stop_ev.is_set():
+            return
+        if not _dd_refresh_lock.acquire(blocking=False):
+            _sc_log("[AutoRefresh] Skipping scheduled refresh — another refresh already running")
+            continue
+        try:
+            _sc_log("[AutoRefresh] Scheduled DataDome refresh (20–30 min timer) …")
+            fresh = _regenerate_datadome()
+            if fresh:
+                sc_holder[0].datadome = fresh
+                _sc_log("[AutoRefresh] DataDome cookie refreshed successfully")
+            else:
+                _sc_log("[AutoRefresh] WARN: Scheduled refresh failed — keeping existing cookie")
+        finally:
+            _dd_refresh_lock.release()
+
+
 def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: str = "links"):
     original_cwd    = os.getcwd()
     original_stdout = sys.stdout
@@ -4605,6 +4634,17 @@ def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: 
             return
 
         _sc.datadome = datadome_val
+
+        # Start background auto-refresh thread (every 20–30 min OR before next step)
+        _dd_stop = threading.Event()
+        _sc_holder = [_sc]
+        _dd_thread = threading.Thread(
+            target=_datadome_refresh_loop,
+            args=(_sc_holder, _dd_stop),
+            daemon=True,
+            name="dd-autorefresh",
+        )
+        _dd_thread.start()
 
         now        = _dt.datetime.now()
         month      = now.month
@@ -4642,13 +4682,15 @@ def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: 
                 try:
                     step_map[step_id]()
                     _sc_log(f"[{prov}] << {step_id} OK")
-                    _sc_log(f"[{prov}] Refreshing DataDome cookie after {step_id}…")
-                    _fresh = _regenerate_datadome()
-                    if _fresh:
-                        _sc.datadome = _fresh
-                        _sc_log(f"[{prov}] DataDome refreshed")
-                    else:
-                        _sc_log(f"[{prov}] WARN: DataDome refresh failed — continuing with existing")
+                    _sc_log(f"[{prov}] Refreshing DataDome cookie before next step…")
+                    with _dd_refresh_lock:
+                        _fresh = _regenerate_datadome()
+                        if _fresh:
+                            _sc.datadome = _fresh
+                            _sc_holder[0] = _sc
+                            _sc_log(f"[{prov}] DataDome refreshed")
+                        else:
+                            _sc_log(f"[{prov}] WARN: DataDome refresh failed — continuing with existing")
                 except Exception as e:
                     import traceback, requests as _req
                     _is_dd = ("datadome" in str(e).lower() or "blocked" in str(e).lower()
@@ -4698,6 +4740,8 @@ def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: 
         _sc_log(traceback.format_exc())
         _scraper_state["error"] = str(e)
     finally:
+        try: _dd_stop.set()
+        except Exception: pass
         sys.stdout = original_stdout
         _scraper_state["running"] = False
         _scraper_state["step"]    = ""
