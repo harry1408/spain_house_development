@@ -4382,11 +4382,14 @@ def _compute_and_run_expired(province: str, month_name: str, month_abbr: str, mo
 PIPELINE_STEPS = ["links","html","listings","subflats","combine","final_sheet","merge","expired"]
 
 _scraper_state: dict = {
-    "running":     False,
-    "step":        "",
-    "steps_done":  [],
-    "error":       None,
-    "aborted":     False,
+    "running":           False,
+    "step":              "",
+    "steps_done":        [],
+    "error":             None,
+    "aborted":           False,
+    "step_times":        {},
+    "dd_refreshes":      [],
+    "pipeline_start_ts": None,
 }
 _scraper_log_q:   queue.Queue     = queue.Queue()
 _scraper_stop_ev: threading.Event = threading.Event()
@@ -4525,6 +4528,14 @@ def _datadome_refresh_loop(sc_holder, stop_ev):
             fresh = _regenerate_datadome()
             if fresh:
                 sc_holder[0].datadome = fresh
+                cur_step = _scraper_state.get("step", "")
+                cur_prov = cur_step.split(":")[0] if ":" in cur_step else ""
+                _scraper_state["dd_refreshes"].append({
+                    "time": _dt.datetime.now().strftime("%H:%M:%S"),
+                    "ts": time.time(),
+                    "context": "auto 20–30 min",
+                    "prov": cur_prov,
+                })
                 _sc_log("[AutoRefresh] DataDome cookie refreshed successfully")
             else:
                 _sc_log("[AutoRefresh] WARN: Scheduled refresh failed — keeping existing cookie")
@@ -4535,11 +4546,14 @@ def _datadome_refresh_loop(sc_holder, stop_ev):
 def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: str = "links"):
     original_cwd    = os.getcwd()
     original_stdout = sys.stdout
-    _scraper_state["running"]    = True
-    _scraper_state["error"]      = None
-    _scraper_state["aborted"]    = False
-    _scraper_state["steps_done"] = []
-    _scraper_state["step"]       = ""
+    _scraper_state["running"]           = True
+    _scraper_state["error"]             = None
+    _scraper_state["aborted"]           = False
+    _scraper_state["steps_done"]        = []
+    _scraper_state["step"]              = ""
+    _scraper_state["step_times"]        = {}
+    _scraper_state["dd_refreshes"]      = []
+    _scraper_state["pipeline_start_ts"] = time.time()
 
     from_idx     = PIPELINE_STEPS.index(from_step) if from_step in PIPELINE_STEPS else 0
     steps_to_run = PIPELINE_STEPS[from_idx:]
@@ -4601,9 +4615,17 @@ def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: 
                     break
 
                 _scraper_state["step"] = f"{prov}:{step_id}"
+                _scraper_state["step_times"][f"{prov}:{step_id}"] = {
+                    "start": _dt.datetime.now().strftime("%H:%M:%S"),
+                    "start_ts": time.time(),
+                }
                 _sc_log(f"[{prov}] >> {step_id} …")
                 try:
                     step_map[step_id]()
+                    _scraper_state["step_times"][f"{prov}:{step_id}"].update({
+                        "end": _dt.datetime.now().strftime("%H:%M:%S"),
+                        "end_ts": time.time(),
+                    })
                     _sc_log(f"[{prov}] << {step_id} OK")
                     _sc_log(f"[{prov}] Refreshing DataDome cookie before next step…")
                     with _dd_refresh_lock:
@@ -4611,26 +4633,56 @@ def _run_pipeline(provinces: list, datadome_val: str, dev_type: str, from_step: 
                         if _fresh:
                             _sc.datadome = _fresh
                             _sc_holder[0] = _sc
+                            _scraper_state["dd_refreshes"].append({
+                                "time": _dt.datetime.now().strftime("%H:%M:%S"),
+                                "ts": time.time(),
+                                "context": f"after {step_id}",
+                                "prov": prov,
+                            })
                             _sc_log(f"[{prov}] DataDome refreshed")
                         else:
                             _sc_log(f"[{prov}] WARN: DataDome refresh failed — continuing with existing")
                 except Exception as e:
                     import traceback, requests as _req
-                    _is_dd = ("datadome" in str(e).lower() or "blocked" in str(e).lower()
-                              or "are you a robot" in str(e).lower())
-                    _is_timeout = isinstance(e, (_req.exceptions.Timeout,
-                                                  _req.exceptions.ConnectionError))
+                    _e_str = str(e).lower()
+                    _is_dd = ("datadome" in _e_str or "blocked" in _e_str
+                              or "are you a robot" in _e_str or "403" in _e_str
+                              or "captcha" in _e_str)
+                    _is_timeout = (
+                        isinstance(e, (_req.exceptions.Timeout, _req.exceptions.ConnectionError))
+                        or "max retries exceeded" in _e_str
+                        or "maxretryerror" in _e_str
+                        or "httpsconnectionpool" in _e_str
+                        or "connection timed out" in _e_str
+                        or "connect timeout" in _e_str
+                        or "remotedisconnected" in _e_str
+                        or "connectionreset" in _e_str
+                    )
                     if _is_dd or _is_timeout:
-                        _sc_log(f"[{prov}] !! DataDome/timeout on {step_id} — regenerating cookie …")
+                        _sc_log(f"[{prov}] !! {'DataDome block' if _is_dd else 'Connection timeout/retry error'} on {step_id} — refreshing cookie …")
                         new_dd = _regenerate_datadome()
                         if new_dd:
                             _sc.datadome = new_dd
-                            _sc_log(f"[{prov}] !! Retrying {step_id} with fresh datadome …")
-                            step_map[step_id]()
-                            _sc_log(f"[{prov}] << {step_id} OK (after cookie refresh)")
-                            continue
+                            _sc_holder[0] = _sc
+                            _scraper_state["dd_refreshes"].append({
+                                "time": _dt.datetime.now().strftime("%H:%M:%S"),
+                                "ts": time.time(),
+                                "context": f"error recovery on {step_id}",
+                                "prov": prov,
+                            })
+                            _sc_log(f"[{prov}] !! Retrying {step_id} with fresh cookie …")
+                            try:
+                                step_map[step_id]()
+                                _scraper_state["step_times"][f"{prov}:{step_id}"].update({
+                                    "end": _dt.datetime.now().strftime("%H:%M:%S"),
+                                    "end_ts": time.time(),
+                                })
+                                _sc_log(f"[{prov}] << {step_id} OK (after cookie recovery)")
+                                continue
+                            except Exception as _retry_e:
+                                _sc_log(f"[{prov}] !! Retry also failed: {_retry_e}")
                         else:
-                            _sc_log(f"[{prov}] !! Could not regenerate DataDome cookie — aborting")
+                            _sc_log(f"[{prov}] !! Could not refresh cookie — aborting")
                     _sc_log(f"[{prov}] !! {step_id} FAILED: {e}")
                     _sc_log(traceback.format_exc())
                     raise
@@ -4820,11 +4872,14 @@ def scraper_datadome():
 @app.get("/scraper/status")
 def scraper_status():
     return safe_json({
-        "running":    _scraper_state["running"],
-        "step":       _scraper_state["step"],
-        "steps_done": _scraper_state["steps_done"],
-        "error":      _scraper_state["error"],
-        "aborted":    _scraper_state["aborted"],
+        "running":           _scraper_state["running"],
+        "step":              _scraper_state["step"],
+        "steps_done":        _scraper_state["steps_done"],
+        "error":             _scraper_state["error"],
+        "aborted":           _scraper_state["aborted"],
+        "step_times":        _scraper_state["step_times"],
+        "dd_refreshes":      _scraper_state["dd_refreshes"],
+        "pipeline_start_ts": _scraper_state["pipeline_start_ts"],
     })
 
 
